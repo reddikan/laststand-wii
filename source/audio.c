@@ -7,6 +7,7 @@
  */
 #include "audio.h"
 #include "speech.h"
+#include "gfx.h"
 
 #include <math.h>
 #include <string.h>
@@ -21,8 +22,8 @@
 static int16_t POOL[POOLN] __attribute__((aligned(32)));
 static int     pool_used;
 static int     sfx_off[SFX_COUNT], sfx_len[SFX_COUNT];
-static float   mixbuf[MAXLEN];
-static float   outbuf[MAXLEN];
+static float  *mixbuf;            /* MAXLEN each, from big_alloc */
+static float  *outbuf;
 static int     mixend;
 static uint32_t rng = 0x2545F491u;
 static int     ready;
@@ -172,7 +173,7 @@ static void noise(float start, float dur, float fc0, float fc1, float q, float v
 
 static void begin(void)
 {
-    memset(mixbuf, 0, sizeof mixbuf);
+    memset(mixbuf, 0, sizeof(float) * MAXLEN);
     mixend = 0;
 }
 
@@ -289,6 +290,8 @@ void audio_init(void)
     if (ready) return;
     ready = 1;
     pool_used = 0;
+    mixbuf = (float *)big_alloc(sizeof(float) * MAXLEN);
+    outbuf = (float *)big_alloc(sizeof(float) * MAXLEN);
     for (int i = 0; i <= TABN; i++) sine_tab[i] = sinf((float)i * 2.0f * (float)M_PI / (float)TABN);
 
     /* --- weapons --- */

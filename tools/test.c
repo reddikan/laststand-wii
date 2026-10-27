@@ -189,6 +189,8 @@ static void shot(const Game *g, const char *name)
 /* ------------------------------------------------------------------ */
 /* the bot                                                              */
 /* ------------------------------------------------------------------ */
+void *big_alloc(unsigned long bytes) { return calloc(1, bytes); }
+
 static Game *G;
 static uint32_t bot_rng = 1;
 

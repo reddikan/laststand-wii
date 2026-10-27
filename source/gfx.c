@@ -11,7 +11,7 @@
 #endif
 #define TAU 6.28318530718f
 
-GVtx gfx_v[GFX_MAX_VTX] __attribute__((aligned(32)));
+GVtx *gfx_v;
 GSeg gfx_seg[GFX_MAX_SEG];
 int  gfx_nv, gfx_nseg;
 
@@ -79,6 +79,7 @@ uint32_t col_hsv(float h, float s, float v, int a)
 
 void gfx_begin(void)
 {
+    if (!gfx_v) gfx_v = (GVtx *)big_alloc(sizeof(GVtx) * GFX_MAX_VTX);
     gfx_nv = 0;
     gfx_nseg = 0;
     cur_mode = -1;

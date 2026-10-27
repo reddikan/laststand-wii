@@ -47,22 +47,26 @@ void gfx_post_init(void);
 typedef struct { float x, y; uint32_t c; } GVtx;          /* c = 0xRRGGBBAA */
 typedef struct { int mode, start, count; } GSeg;
 
-extern GVtx gfx_v[GFX_MAX_VTX];
+extern GVtx *gfx_v;                 /* GFX_MAX_VTX vertices, from big_alloc */
+
+/* big working buffers the CPU alone uses: the platform decides where they live (the Wii puts them in MEM2,
+ * leaving its smaller main memory for the sound, the music and the GPU's own buffers) */
+void *big_alloc(unsigned long bytes);
 extern GSeg gfx_seg[GFX_MAX_SEG];
 extern int  gfx_nv, gfx_nseg;
 
 static inline uint32_t RGBA(int r, int g, int b, int a)
 {
-    if (r < 0) r = 0; if (r > 255) r = 255;
-    if (g < 0) g = 0; if (g > 255) g = 255;
-    if (b < 0) b = 0; if (b > 255) b = 255;
-    if (a < 0) a = 0; if (a > 255) a = 255;
+    r = r < 0 ? 0 : (r > 255 ? 255 : r);
+    g = g < 0 ? 0 : (g > 255 ? 255 : g);
+    b = b < 0 ? 0 : (b > 255 ? 255 : b);
+    a = a < 0 ? 0 : (a > 255 ? 255 : a);
     return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | (uint32_t)a;
 }
 static inline uint32_t col_a(uint32_t c, float a)          /* scale alpha */
 {
     int al = (int)((float)(c & 255) * a);
-    if (al < 0) al = 0; if (al > 255) al = 255;
+    al = al < 0 ? 0 : (al > 255 ? 255 : al);
     return (c & 0xFFFFFF00u) | (uint32_t)al;
 }
 uint32_t col_mix(uint32_t a, uint32_t b, float t);           /* lerp all four channels */

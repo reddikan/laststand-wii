@@ -7,6 +7,7 @@
  * (E minor: Em - C - D - B), so any mix of them is in time and in tune.
  */
 #include "music.h"
+#include "gfx.h"
 
 #include <math.h>
 #include <string.h>
@@ -36,7 +37,7 @@ static inline float fast_exp(float x)
 #define MUS_MAX (MUS_RATE * 30 + 16)
 static int16_t MUS[MUS_TRACKS][MUS_MAX] __attribute__((aligned(32)));
 static int     mus_len[MUS_TRACKS];
-static float   mix[MUS_MAX];
+static float  *mix;               /* MUS_MAX floats, from big_alloc */
 static int     N;                         /* length of the loop being built */
 static float   BEAT;                      /* seconds per beat */
 static uint32_t rng = 0x1234567u;
@@ -245,7 +246,7 @@ static void begin(float bpm, int beats)
     BEAT = 60.0f / bpm;
     N = ((int)((float)beats * BEAT * SR) + 15) & ~15;
     if (N > MUS_MAX) N = MUS_MAX;
-    memset(mix, 0, sizeof mix);
+    memset(mix, 0, sizeof(float) * MUS_MAX);
 }
 
 static void finish(int track)
@@ -618,6 +619,7 @@ void music_init(void)
 {
     if (ready) return;
     ready = 1;
+    mix = (float *)big_alloc(sizeof(float) * MUS_MAX);
     track_menu();
     track_run();
     track_chaos();

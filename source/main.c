@@ -33,6 +33,14 @@
 #define SAVE_DIR  "sd:/apps/laststand"
 #define SAVE_PATH "sd:/apps/laststand/save.dat"
 
+/* CPU-only working buffers go to MEM2 (see gfx.h) */
+void *big_alloc(unsigned long bytes)
+{
+    u32 lo = ((u32)SYS_GetArena2Lo() + 31) & ~31u;
+    SYS_SetArena2Lo((void *)(lo + ((bytes + 31) & ~31ul)));
+    return (void *)lo;
+}
+
 static GXRModeObj *rmode;
 static void       *xfb[2];
 static int         fbi;
