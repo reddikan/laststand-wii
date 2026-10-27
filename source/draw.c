@@ -442,7 +442,7 @@ static void draw_particles(const Game *g, int add)
         case PT_SPARK: gfx_capsule(x, y, q->vx, q->vy, 4.0f + sqrtf(q->vx * q->vx + q->vy * q->vy) * 0.025f, q->size, col_a(c, k)); break;
         case PT_FIRE: {
             float r = q->size * (0.5f + 0.8f * k);
-            gfx_poly2(x, y, r * 1.3f, 7, q->rot, col_a(col_mix(c, 0xFFFFE0FFu, k * 0.4f), k * 0.55f), col_a(c, 0.0f));
+            gfx_poly2(x, y, r * 1.3f, 7, q->rot, col_a(col_mix(c, 0xFFE8B0FFu, k * 0.3f), k * 0.42f), col_a(c, 0.0f));
             break;
         }
         case PT_SMOKE: gfx_poly2(x, y, q->size * (1.4f - 0.4f * k), 6, q->rot, col_a(c, 0.75f * k), col_a(c, 0.0f)); break;
@@ -518,7 +518,7 @@ static void draw_booms(const Game *g)
         if (b->kind == 1) { hot = 0xE0FFB0FFu; mid = 0x80FF40FFu; out = 0x208010FFu; }
         if (b->kind == 2) { hot = 0xFFD0FFFFu; mid = 0xC050FFFFu; out = 0x5010A0FFu; }
         float r = b->r * (0.45f + 0.75f * sqrtf(k));
-        gfx_glow(x, y, r * 2.0f, col_a(out, 0.32f * (1 - k)));
+        gfx_glow(x, y, r * 1.8f, col_a(out, 0.22f * (1 - k)));
         /* a billowing fireball: lumps rolling outwards round a white-hot core */
         float fa = (1.0f - k) * (1.0f - k);
         uint32_t seed = (uint32_t)(b->x * 7.0f + b->y * 13.0f);
@@ -703,6 +703,11 @@ static void draw_lighting(const Game *g)
                 lr[j][i] += (float)L->cr * f; lg_[j][i] += (float)L->cg * f; lb[j][i] += (float)L->cb * f;
             }
         }
+    }
+    /* roll the highlights off so a pile of lights glows instead of blowing out to white */
+    for (int j = 0; j <= LGH; j++) for (int i = 0; i <= LGW; i++) {
+        float *v[3] = { &lr[j][i], &lg_[j][i], &lb[j][i] };
+        for (int c = 0; c < 3; c++) if (*v[c] > 140.0f) { float x = 140.0f + (*v[c] - 140.0f) * 0.35f; *v[c] = x > 196.0f ? 196.0f : x; }
     }
     gfx_view_reset();
     gfx_blend(BL_MUL);
