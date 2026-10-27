@@ -22,7 +22,7 @@ static int onscreen(float x, float y, float m) { return x > -m && x < VW + m && 
 /* ------------------------------------------------------------------ */
 typedef struct { uint32_t base, dark, light, crack; int amb[3]; } Biome;
 static const Biome BIO[NBIOMES] = {
-    { 0x8A6A46FFu, 0x76583AFFu, 0x9C7C54FFu, 0x5A4030FFu, { 122, 100, 90 } },   /* dusk desert */
+    { 0x7E6040FFu, 0x664C32FFu, 0x8E704CFFu, 0x4A3426FFu, { 104, 86, 80 } },    /* dusk desert */
     { 0x34442AFFu, 0x22302AFFu, 0x44583AFFu, 0x1E2A1EFFu, { 80, 98, 86 } },    /* swamp */
     { 0x3C3630FFu, 0x2E2A26FFu, 0x424434FFu, 0x221E1CFFu, { 64, 68, 86 } },    /* graveyard */
     { 0x2C2624FFu, 0x1E1A18FFu, 0x36302CFFu, 0x120E0EFFu, { 60, 42, 40 } },    /* burned forest */

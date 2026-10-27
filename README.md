@@ -56,11 +56,18 @@ Souls, gunslingers, perks, unlocked biomes and settings save to `sd:/apps/lastst
 
 With devkitPro installed: `make` builds `boot.dol` (open it in Dolphin) and an `apps/laststand/` folder for a real Wii's SD card.
 
-Pushed to GitHub, the Actions workflow builds the game in the devkitPro container and publishes it as `laststand_v1.dol` on the **v1** release.
+Pushed to GitHub, the Actions workflow builds the game in the devkitPro container and publishes it as `laststand_v2.dol` on the **v2** release.
 
 ## Tests
 
 `sh tools/run_tests.sh` builds a native test harness (any C compiler; Pillow for PNG export) that walks the menus, the shop and the save, renders screenshots of every biome and boss through a software copy of the GPU path (including the lighting pass), and plays whole runs with bots of different skill to check the balance and the frame cost. `sh tools/run_tests.sh reel 3` renders a preview video of biome 3 with its music and sound (needs ffmpeg).
+
+## The look and the noise (v2)
+
+- **Grungy post-processing** on the Wii's GPU: the frame is copied into textures every frame and drawn back with an RGB split (it widens with screen shake, big hits and when you're hurt), a blur that softens the screen edges (and the whole screen behind menus), a washed-out colour grade per biome, animated film grain and a grimy lens.
+- **An animated cast**: run cycles with knees and swinging arms, heads that bob a beat behind, eyes that blink and follow you, angry brows, mouths that snarl, chomp and scream, faces that screw up when hit, wounds that open as they take damage and bleed a trail.
+- **Gore**: blood sprays from every hit, pools that spread, smears where bodies were thrown, corpses that pile up, monsters blown to pieces by explosions (heads included), and blood running down the lens when you get hit.
+- **The noise machine**: every hit and death has its own sound and its own scream, groan, caw or wail; chimes climb the scale as the combo grows and as you hoover up coins, stingers and an announcer for multi-kills and streaks ("MULTI KILL", "MEGA KILL", "CARNAGE", "BLOODBATH", "GODLIKE"...), the horde grumbling all around, each biome's own ambience (bells and chains in the graveyard, whispers and laughter in the Hellmouth), and a heartbeat when you're nearly dead.
 
 ## How it is made
 
