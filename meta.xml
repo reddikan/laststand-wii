@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>LAST STAND</name>
+  <coder>Claude</coder>
+  <version>1.0</version>
+  <release_date>20261027000000</release_date>
+  <short_description>Bullet-heaven roguelite survival shooter (Classic Controller)</short_description>
+  <long_description>Hold the line against endless hordes across five cursed biomes, each darker than the last. Survive ten waves, spend your bounty on six outrageous weapons, then face the boss at 10:00.
+
+Controls (Classic Controller):
+Left stick: move    Right stick: aim (auto-aims when centred)
+A / B / X / Y: choose the weapon in that slot    R or ZR: fire
+L or ZL: dash    +: pause    -: 16:9 / 4:3    HOME: exit</long_description>
+</app>

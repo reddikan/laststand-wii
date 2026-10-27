@@ -1,0 +1,33 @@
+name: Build laststand_v1.dol
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitppc:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make
+      - run: cp boot.dol laststand_v1.dol
+      - uses: actions/upload-artifact@v4
+        with:
+          name: laststand-wii
+          path: |
+            laststand_v1.dol
+            apps/
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: laststand-wii
+      - name: Publish the v1 download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view v1 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create v1 -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LAST STAND v1" --notes "Open laststand_v1.dol in Dolphin (Classic Controller), or copy apps/laststand to an SD card."
+          gh release upload v1 laststand_v1.dol -R "$GITHUB_REPOSITORY" --clobber
