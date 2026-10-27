@@ -11,7 +11,7 @@
 
 static float OXs, OYs;           /* world -> screen offset this frame */
 static float ZM = 1.0f;          /* the world is drawn zoomed in a little about the screen centre */
-#define WORLD_ZOOM 1.14f
+#define WORLD_ZOOM 1.42f
 #define SX(x) ((x) + OXs)
 #define SY(y) ((y) + OYs)
 
@@ -149,18 +149,32 @@ static void draw_decals(const Game *g)
         const Decal *d = &g->dec[i];
         if (d->life <= 0) continue;
         float x = SX(d->x), y = SY(d->y);
-        if (!onscreen(x, y, d->r + 10)) continue;
+        if (!onscreen(x, y, d->r * 2 + 10)) continue;
         float a = clampf(d->life / 6.0f, 0, 1);
         uint32_t c = col_a(d->c, a);
-        if (d->kind == 1) {               /* a splat: a blob and some droplets */
-            blob(x, y, d->r, (uint32_t)(d->rot * 1000.0f), c, 7);
-            for (int k = 0; k < 2; k++) {
-                float an = d->rot + (float)k * 2.4f;
-                gfx_poly(x + cosf(an) * d->r * 1.3f, y + sinf(an) * d->r * 0.9f, d->r * 0.25f, 5, 0, c);
+        switch (d->kind) {
+        case DC_POOL: {          /* a pool that spreads out over the first second, glossy in the middle */
+            float r = d->r * (0.35f + 0.65f * clampf(d->age / 0.9f, 0, 1));
+            blob(x, y, r, (uint32_t)(d->rot * 1000.0f), c, 8);
+            blob(x - r * 0.15f, y - r * 0.1f, r * 0.55f, (uint32_t)(d->rot * 777.0f), col_a(col_mix(d->c, 0x000000FFu, 0.3f), a), 6);
+            gfx_poly(x - r * 0.3f, y - r * 0.2f, r * 0.12f, 5, 0, col_a(0xFFD0D0FFu, a * 0.18f));
+            for (int k = 0; k < 3; k++) {
+                float an = d->rot + (float)k * 2.1f;
+                gfx_poly(x + cosf(an) * r * 1.35f, y + sinf(an) * r * 0.95f, r * 0.2f, 5, 0, c);
             }
-        } else {
+            break;
+        }
+        case DC_SPOT: gfx_poly(x, y, d->r, 5, d->rot, c); break;
+        case DC_SMEAR: {         /* dragged along the way the body flew */
+            float cs = cosf(d->rot), sn = sinf(d->rot), l = d->r * 1.6f, w = d->r * 0.35f;
+            gfx_quad4(x - cs * l * 0.2f - sn * w, y - sn * l * 0.2f + cs * w, c, x + cs * l - sn * w * 0.3f, y + sn * l + cs * w * 0.3f, c & 0xFFFFFF00u,
+                      x + cs * l + sn * w * 0.3f, y + sn * l - cs * w * 0.3f, c & 0xFFFFFF00u, x - cs * l * 0.2f + sn * w, y - sn * l * 0.2f - cs * w, c);
+            break;
+        }
+        default:
             gfx_poly2(x, y, d->r, 9, d->rot, c, c & 0xFFFFFF00u);
-            if (d->kind == 2) gfx_ring(x, y, d->r * 0.8f, 3, 14, 0, col_a(0x000000FFu, a * 0.4f));
+            if (d->kind == DC_CRATER) gfx_ring(x, y, d->r * 0.8f, 3, 14, 0, col_a(0x000000FFu, a * 0.4f));
+            break;
         }
     }
 }
@@ -186,6 +200,17 @@ static void draw_fires(const Game *g, int glow)
                         fx + sinf(g->t * 9 + (float)t) * 3, fy - h, col_a(green ? 0xD0FF80FFu : 0xFFE080FFu, 0.0f));
             }
         }
+    }
+}
+
+static void draw_corpses(const Game *g)
+{
+    for (int i = 0; i < MAX_CORPSE; i++) {
+        const Corpse *c = &g->corpse[i];
+        if (!c->alive) continue;
+        float x = SX(c->x), y = SY(c->y);
+        if (!onscreen(x, y, 40 * c->s)) continue;
+        art_corpse(c, x, y, clampf(c->life / 4.0f, 0, 1));
     }
 }
 
@@ -216,8 +241,18 @@ static void draw_player(const Game *g)
     const Player *p = &g->p;
     float x = SX(p->x), y = SY(p->y);
     art_shadow(x, y + 11, 11, 4, 1);
-    if (p->hp <= 0) {      /* down: a hat in the dust */
-        art_player(x, y + 4, p->character, p->face, 0, p->ax, p->ay, g->t, 0, 1.0f);
+    Anim an;
+    memset(&an, 0, sizeof an);
+    an.t = g->t; an.run = p->walk;
+    an.mv = clampf(sqrtf(p->vx * p->vx + p->vy * p->vy) / 150.0f, 0, 1);
+    an.hurt = clampf(p->hurt_t / 0.3f, 0, 1);
+    an.lookx = fabsf(p->ax); an.looky = p->ay;
+    an.blink = fmodf(g->t, 3.7f) < 0.1f ? 1.0f : 0.0f;
+    an.firing = p->firing; an.seed = 77;
+    an.wounds = p->hp < p->maxhp * 0.75f ? (p->hp < p->maxhp * 0.5f ? (p->hp < p->maxhp * 0.25f ? 3 : 2) : 1) : 0;
+    if (p->hp <= 0) {      /* down, in a spreading pool */
+        an.dead = 1; an.mv = 0;
+        art_player_ex(x, y + 4, p->character, p->face, &an, 1.0f, -1.45f * p->face);
         return;
     }
     int blink = p->inv > 0 && p->stand_t <= 0 && p->hurt_t <= 0 && ((int)(g->t * 20.0f) & 1);
@@ -242,7 +277,7 @@ static void draw_player(const Game *g)
             float hx = px + p->ax * (9.0f - rec), hy = py - 3.0f + p->ay * (7.0f - rec);
             int gun_behind = p->ay < -0.3f;
             if (w >= 0 && gun_behind) art_weapon_held(w, hx, hy, ang, 1.1f, p->spin, g->t);
-            art_player(px, py, p->character, p->face, p->walk, p->ax, p->ay, g->t, p->hurt_t, 1.0f);
+            art_player_ex(px, py, p->character, p->face, &an, 1.0f, 0);
             if (w >= 0 && !gun_behind) art_weapon_held(w, hx, hy, ang, 1.1f, p->spin, g->t);
         }
     }
@@ -257,6 +292,7 @@ static void draw_entities(const Game *g)
         if (!onscreen(SX(e->x), SY(e->y), e->r * 2.5f + 20)) continue;
         ord[n].y = e->y; ord[n].id = (int16_t)i; n++;
     }
+    art_set_detail(n < 45);
     ord[n].y = g->p.y; ord[n].id = -1; n++;
     /* insertion sort: nearly sorted from frame to frame anyway */
     for (int i = 1; i < n; i++) {
@@ -406,7 +442,7 @@ static void draw_particles(const Game *g, int add)
         case PT_SPARK: gfx_capsule(x, y, q->vx, q->vy, 4.0f + sqrtf(q->vx * q->vx + q->vy * q->vy) * 0.025f, q->size, col_a(c, k)); break;
         case PT_FIRE: {
             float r = q->size * (0.5f + 0.8f * k);
-            gfx_poly2(x, y, r * 1.3f, 7, q->rot, col_a(col_mix(c, 0xFFFFE0FFu, k * 0.6f), k), col_a(c, 0.0f));
+            gfx_poly2(x, y, r * 1.3f, 7, q->rot, col_a(col_mix(c, 0xFFFFE0FFu, k * 0.4f), k * 0.55f), col_a(c, 0.0f));
             break;
         }
         case PT_SMOKE: gfx_poly2(x, y, q->size * (1.4f - 0.4f * k), 6, q->rot, col_a(c, 0.75f * k), col_a(c, 0.0f)); break;
@@ -438,6 +474,20 @@ static void draw_particles(const Game *g, int add)
             gfx_tri(x, y - s * 0.7f, 0xFFFFE0FFu, x + s * 0.2f, y, 0xFFFFE0FFu, x, y + s * 0.7f, 0xFFFFE000u);
             break;
         }
+        case PT_BLOOD: {
+            float ang = atan2f(q->vy - q->vz * 0.3f, q->vx), l = q->size * 1.6f;
+            float cs = cosf(ang) * l, sn = sinf(ang) * l;
+            gfx_line(x - cs, y - sn, x + cs * 0.4f, y + sn * 0.4f, q->size, q->c1, q->c0);
+            break;
+        }
+        case PT_MIST: gfx_poly2(x, y, q->size, 7, q->rot, col_a(q->c0, k * 0.6f), q->c1 & 0xFFFFFF00u); break;
+        case PT_GIB: {
+            float s = q->size, cs = cosf(q->rot) * s, sn = sinf(q->rot) * s;
+            gfx_quad4(x + cs, y + sn, 0x120808FFu, x - sn * 0.8f, y + cs * 0.8f, 0x120808FFu, x - cs, y - sn, 0x120808FFu, x + sn * 0.8f, y - cs * 0.8f, 0x120808FFu);
+            gfx_quad4(x + cs * 0.7f, y + sn * 0.7f, q->c0, x - sn * 0.55f, y + cs * 0.55f, q->c1, x - cs * 0.7f, y - sn * 0.7f, q->c0, x + sn * 0.55f, y - cs * 0.55f, q->c1);
+            break;
+        }
+        case PT_HEAD: art_head((int)q->c1, x, y - 2, q->size, q->rot, 1); break;
         case PT_RING: {   /* a dash after-image */
             gfx_poly2(x, y, 11, 10, 0, col_a(q->c0, 0.5f * k), col_a(q->c0, 0));
             break;
@@ -469,7 +519,15 @@ static void draw_booms(const Game *g)
         if (b->kind == 2) { hot = 0xFFD0FFFFu; mid = 0xC050FFFFu; out = 0x5010A0FFu; }
         float r = b->r * (0.45f + 0.75f * sqrtf(k));
         gfx_glow(x, y, r * 2.0f, col_a(out, 0.32f * (1 - k)));
-        gfx_poly2(x, y, r, 12, k * 3.0f, col_a(hot, 1.0f - k), col_a(mid, 0.8f * (1 - k)));
+        /* a billowing fireball: lumps rolling outwards round a white-hot core */
+        float fa = (1.0f - k) * (1.0f - k);
+        uint32_t seed = (uint32_t)(b->x * 7.0f + b->y * 13.0f);
+        for (int j = 0; j < 6; j++) {
+            float an = (float)j * 1.047f + (float)(seed & 7) + k * 1.5f;
+            float rr = r * (0.38f + 0.12f * (float)((hash32(seed + (uint32_t)j) >> 8) & 3));
+            gfx_poly2(x + cosf(an) * r * 0.45f, y + sinf(an) * r * 0.4f - k * r * 0.3f, rr, 9, an, col_a(col_mix(hot, mid, k), 0.55f * fa), col_a(out, 0.0f));
+        }
+        gfx_poly2(x, y, r * 0.42f, 10, -k * 2.0f, col_a(0xFFFFF0FFu, 0.75f * fa), col_a(hot, 0.0f));
         gfx_ring2(x, y, b->r * (0.3f + 1.4f * k), 10.0f * (1 - k) + 2, b->big ? 24 : 16, 0, col_a(0xFFFFFFFFu, 0.0f), col_a(hot, 0.7f * (1 - k)));
         if (k < 0.12f) gfx_glow_cheap(x, y, b->r * 2.4f, col_a(0xFFFFFFFFu, 0.35f * (1 - k / 0.12f)));
     }
@@ -733,7 +791,7 @@ static void draw_numbers(const Game *g)
         if (n->kind == 2) { snprintf(buf, sizeof buf, "%s", n->txt ? n->txt : ""); c = 0xFFE070FFu; px = 1.6f; }
         else if (n->crit) { snprintf(buf, sizeof buf, "%d!", n->val); c = 0xFFD030FFu; px = 2.2f; }
         else { snprintf(buf, sizeof buf, "%d", n->val); c = n->val >= 100 ? 0xFF4030FFu : 0xF0ECE0FFu; px = 1.5f; }
-        px *= pop;
+        px *= pop / ZM;
         float w = gfx_text_width(buf, px);
         gfx_text(buf, x - w * 0.5f + 1.2f, y + 1.2f, px, col_a(0x000000FFu, a * 0.9f));
         gfx_text(buf, x - w * 0.5f, y, px, col_a(c, a));
@@ -756,6 +814,8 @@ void draw_world(const Game *g)
     DBG("draw_floor");
     draw_decals(g);
     DBG("draw_decals");
+    draw_corpses(g);
+    DBG("draw_corpses");
     draw_props(g);
     DBG("draw_props");
     draw_fires(g, 0);
@@ -799,4 +859,33 @@ void draw_world(const Game *g)
     DBG("draw_vignette");
     gfx_view(0, 0, ZM);
     draw_numbers(g);
+}
+
+/* blood on the lens: splats that run down the screen, drawn after the post-processing */
+void draw_lens(const Game *g)
+{
+    gfx_view_reset();
+    gfx_blend(BL_ALPHA);
+    for (int i = 0; i < MAX_LENS; i++) {
+        const Lens *l = &g->lens[i];
+        if (l->r <= 0) continue;
+        float a = l->t < 2.2f ? 1.0f : clampf((3.5f - l->t) / 1.3f, 0, 1);
+        float r = l->r * (l->t < 0.06f ? l->t / 0.06f : 1.0f);
+        uint32_t c = col_a(0x6A0406E0u, a), c2 = col_a(0x9A0A0CD0u, a);
+        blob(l->x, l->y, r, l->seed, c, 10);
+        blob(l->x - r * 0.1f, l->y - r * 0.12f, r * 0.7f, l->seed * 3u, c2, 8);
+        for (int k = 0; k < 6; k++) {           /* spatter around it */
+            uint32_t h = hash32(l->seed + (uint32_t)k * 77u);
+            float an = (float)(h & 1023) / 1023.0f * TAU_F, dd = r * (1.2f + (float)((h >> 10) & 255) / 255.0f * 1.2f);
+            gfx_poly(l->x + cosf(an) * dd, l->y + sinf(an) * dd * 0.8f, r * 0.08f + (float)((h >> 18) & 7) * 0.6f, 5, 0, c);
+        }
+        for (int k = 0; k < 3; k++) {           /* runs */
+            uint32_t h = hash32(l->seed * 13u + (uint32_t)k);
+            float dx = ((float)(h & 255) / 255.0f - 0.5f) * r * 1.2f, len = l->drip * (0.5f + (float)((h >> 8) & 255) / 255.0f);
+            float w = 1.5f + (float)((h >> 16) & 3);
+            gfx_line(l->x + dx, l->y, l->x + dx, l->y + r * 0.5f + len, w, c, c2);
+            gfx_poly(l->x + dx, l->y + r * 0.5f + len, w * 0.8f, 6, 0, c2);
+        }
+        gfx_poly(l->x - r * 0.35f, l->y - r * 0.35f, r * 0.12f, 6, 0, col_a(0xFFC0C0FFu, a * 0.25f));    /* a glint */
+    }
 }

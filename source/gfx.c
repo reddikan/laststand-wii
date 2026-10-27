@@ -89,7 +89,7 @@ void gfx_begin(void)
 void gfx_blend(int mode)
 {
     if (mode == cur_mode) return;
-    if (gfx_nseg > 0 && gfx_seg[gfx_nseg - 1].count == 0) {   /* empty segment: just retag it */
+    if (gfx_nseg > 0 && gfx_seg[gfx_nseg - 1].count == 0 && gfx_seg[gfx_nseg - 1].mode != BL_POST) {   /* empty segment: just retag it */
         gfx_seg[gfx_nseg - 1].mode = mode;
         cur_mode = mode;
         return;
@@ -390,3 +390,73 @@ void gfx_text_s(const char *s, float x, float y, float px, uint32_t c)
 }
 void gfx_text_sc(const char *s, float cx, float y, float px, uint32_t c) { gfx_text_s(s, cx - gfx_text_width(s, px) * 0.5f, y, px, c); }
 void gfx_text_sr(const char *s, float rx, float y, float px, uint32_t c) { gfx_text_s(s, rx - gfx_text_width(s, px), y, px, c); }
+
+/* ------------------------------------------------------------------ */
+/* post-processing                                                      */
+/* ------------------------------------------------------------------ */
+GfxPost gfx_post_p;
+uint8_t gfx_noise_tex[POST_TEX * POST_TEX] __attribute__((aligned(32)));
+uint8_t gfx_dirt_tex[POST_TEX * POST_TEX] __attribute__((aligned(32)));
+
+void gfx_post(const GfxPost *p)
+{
+    gfx_post_p = *p;
+    if (gfx_nseg >= GFX_MAX_SEG - 1) return;
+    gfx_seg[gfx_nseg].mode = BL_POST; gfx_seg[gfx_nseg].start = gfx_nv; gfx_seg[gfx_nseg].count = 0; gfx_nseg++;
+    gfx_seg[gfx_nseg].mode = BL_ALPHA; gfx_seg[gfx_nseg].start = gfx_nv; gfx_seg[gfx_nseg].count = 0; gfx_nseg++;
+    cur_mode = BL_ALPHA;
+}
+
+static uint32_t prng = 0x1234567u;
+static float pr01(void) { prng ^= prng << 13; prng ^= prng >> 17; prng ^= prng << 5; return (float)(prng >> 8) / 16777216.0f; }
+
+void gfx_post_init(void)
+{
+    /* grain: roughly gaussian (sum of three uniforms) */
+    for (int i = 0; i < POST_TEX * POST_TEX; i++) {
+        float n = (pr01() + pr01() + pr01()) / 3.0f;            /* mean 0.5, sd ~0.17 */
+        int v = (int)(128.0f + (n - 0.5f) * 2.0f * 200.0f);
+        gfx_noise_tex[i] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+    }
+    /* grime: soft low-frequency smudges (value noise, a few octaves), darker blotches, specks and scratches */
+    static float grid[17][17];
+    float acc[POST_TEX * POST_TEX];
+    for (int i = 0; i < POST_TEX * POST_TEX; i++) acc[i] = 0;
+    for (int oct = 0; oct < 3; oct++) {
+        int cells = 4 << oct;
+        for (int y = 0; y <= cells; y++) for (int x = 0; x <= cells; x++) grid[y][x] = pr01();
+        for (int y = 0; y <= cells; y++) grid[y][cells] = grid[y][0];
+        for (int x = 0; x <= cells; x++) grid[cells][x] = grid[0][x];
+        float amp = 1.0f / (float)(1 << oct);
+        for (int y = 0; y < POST_TEX; y++)
+            for (int x = 0; x < POST_TEX; x++) {
+                float fx = (float)x / (float)POST_TEX * (float)cells, fy = (float)y / (float)POST_TEX * (float)cells;
+                int ix = (int)fx, iy = (int)fy;
+                float tx = fx - (float)ix, ty = fy - (float)iy;
+                tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+                float a = grid[iy][ix] + (grid[iy][ix + 1] - grid[iy][ix]) * tx;
+                float b = grid[iy + 1][ix] + (grid[iy + 1][ix + 1] - grid[iy + 1][ix]) * tx;
+                acc[y * POST_TEX + x] += (a + (b - a) * ty) * amp;
+            }
+    }
+    for (int i = 0; i < POST_TEX * POST_TEX; i++) {
+        float v = acc[i] / 1.75f;                                /* 0..1 */
+        float d = v < 0.45f ? (0.45f - v) * 1.4f : 0.0f;         /* only the low parts darken */
+        int c = (int)(128.0f - d * 200.0f + (pr01() - 0.5f) * 10.0f);
+        gfx_dirt_tex[i] = (uint8_t)(c < 0 ? 0 : (c > 255 ? 255 : c));
+    }
+    for (int k = 0; k < 90; k++) {                               /* dust specks */
+        int x = (int)(pr01() * POST_TEX), y = (int)(pr01() * POST_TEX);
+        int dark = pr01() < 0.7f;
+        gfx_dirt_tex[(y % POST_TEX) * POST_TEX + x % POST_TEX] = dark ? 40 : 200;
+        if (pr01() < 0.4f) gfx_dirt_tex[(y % POST_TEX) * POST_TEX + (x + 1) % POST_TEX] = dark ? 70 : 180;
+    }
+    for (int k = 0; k < 6; k++) {                                /* hairline scratches */
+        float x = pr01() * POST_TEX, y = pr01() * POST_TEX, a = pr01() * 6.283f, len = 10 + pr01() * 40;
+        for (float t = 0; t < len; t += 0.7f) {
+            int px = ((int)(x + cosf(a) * t) + POST_TEX) % POST_TEX, py = ((int)(y + sinf(a) * t) + POST_TEX) % POST_TEX;
+            gfx_dirt_tex[py * POST_TEX + px] = 96;
+            a += (pr01() - 0.5f) * 0.1f;
+        }
+    }
+}

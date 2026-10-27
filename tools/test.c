@@ -32,12 +32,95 @@ static int fails;
 /* ------------------------------------------------------------------ */
 /* software rasterizer                                                  */
 /* ------------------------------------------------------------------ */
+/* the Wii's post-processing (see gfx.h and main.c), done on the float framebuffer */
+static float pc[OH][OW][3];
+#define BW (OW / 4)
+#define BH (OH / 4)
+static float pb[BH][BW][3], py[BH][BW];
+static int post_ready;
+
+static void samp_c(float u, float v, float *o)       /* bilinear, clamped */
+{
+    float x = u * OW - 0.5f, y = v * OH - 0.5f;
+    if (x < 0) x = 0; if (y < 0) y = 0; if (x > OW - 1.001f) x = OW - 1.001f; if (y > OH - 1.001f) y = OH - 1.001f;
+    int ix = (int)x, iy = (int)y; float fx = x - ix, fy = y - iy;
+    for (int c = 0; c < 3; c++) {
+        float a = pc[iy][ix][c] + (pc[iy][ix + 1][c] - pc[iy][ix][c]) * fx;
+        float b = pc[iy + 1][ix][c] + (pc[iy + 1][ix + 1][c] - pc[iy + 1][ix][c]) * fx;
+        o[c] = a + (b - a) * fy;
+    }
+}
+static void samp_b(float u, float v, float *o, float *lum)
+{
+    float x = u * BW - 0.5f, y = v * BH - 0.5f;
+    if (x < 0) x = 0; if (y < 0) y = 0; if (x > BW - 1.001f) x = BW - 1.001f; if (y > BH - 1.001f) y = BH - 1.001f;
+    int ix = (int)x, iy = (int)y; float fx = x - ix, fy = y - iy;
+    if (o) for (int c = 0; c < 3; c++) {
+        float a = pb[iy][ix][c] + (pb[iy][ix + 1][c] - pb[iy][ix][c]) * fx;
+        float b = pb[iy + 1][ix][c] + (pb[iy + 1][ix + 1][c] - pb[iy + 1][ix][c]) * fx;
+        o[c] = a + (b - a) * fy;
+    }
+    if (lum) { float a = py[iy][ix] + (py[iy][ix + 1] - py[iy][ix]) * fx, b = py[iy + 1][ix] + (py[iy + 1][ix + 1] - py[iy + 1][ix]) * fx; *lum = a + (b - a) * fy; }
+}
+static float edge_k(float x, float y)
+{
+    float dx = (x / VW - 0.5f) * 2.0f, dy = (y / VH - 0.5f) * 2.0f;
+    float d = sqrtf(dx * dx * 0.8f + dy * dy * 1.1f);
+    float k = (d - 0.35f) / 0.75f;
+    return k < 0 ? 0 : (k > 1 ? 1 : k * k);
+}
+
+static void post_apply(void)
+{
+    if (!post_ready) { gfx_post_init(); post_ready = 1; }
+    const GfxPost *P = &gfx_post_p;
+    memcpy(pc, fb, sizeof pc);
+    for (int y = 0; y < BH; y++) for (int x = 0; x < BW; x++) {
+        float acc[3] = { 0, 0, 0 };
+        for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) for (int c = 0; c < 3; c++) acc[c] += fb[y * 4 + j][x * 4 + i][c];
+        for (int c = 0; c < 3; c++) pb[y][x][c] = acc[c] / 16.0f;
+        py[y][x] = 0.257f * pb[y][x][0] + 0.504f * pb[y][x][1] + 0.098f * pb[y][x][2] + 16.0f / 255.0f;
+    }
+    float su = P->split / VW;
+    float tr = (float)(P->tint >> 24) / 255.0f, tg = (float)((P->tint >> 16) & 255) / 255.0f, tb = (float)((P->tint >> 8) & 255) / 255.0f;
+    for (int y = 0; y < OH; y++) for (int x = 0; x < OW; x++) {
+        float u = ((float)x + 0.5f) / OW, v = ((float)y + 0.5f) / OH, o[3], t[3];
+        samp_c(u - su, v, t); o[0] = t[0];                 /* red sampled at u - su, like the Wii's texcoords */
+        samp_c(u, v, t); o[1] = t[1];
+        samp_c(u + su, v, t); o[2] = t[2];
+        float xv = u * VW, yv = v * VH;
+        float a = P->blur + P->blur_edge * edge_k(xv, yv);
+        for (int pass = 0; pass < 2; pass++) {
+            float off = pass ? -1.5f : 1.5f, ka = pass ? 0.5f : 0.75f, aa = a * ka;
+            if (aa > 1) aa = 1;
+            samp_b(u + off / VW, v + off / VH, t, NULL);
+            for (int c = 0; c < 3; c++) o[c] = o[c] * (1 - aa) + t[c] * aa;
+        }
+        float lum;
+        samp_b(u, v, NULL, &lum);
+        o[0] = o[0] * (1 - P->desat) + lum * tr * P->desat;
+        o[1] = o[1] * (1 - P->desat) + lum * tg * P->desat;
+        o[2] = o[2] * (1 - P->desat) + lum * tb * P->desat;
+        int nx = ((int)floorf((P->gu + xv * POST_NU) * POST_TEX)) & (POST_TEX - 1), ny = ((int)floorf((P->gv + yv * POST_NV) * POST_TEX)) & (POST_TEX - 1);
+        float n = (float)gfx_noise_tex[ny * POST_TEX + nx] / 255.0f;
+        float dx = u * POST_TEX - 0.5f, dy = v * POST_TEX - 0.5f;
+        int ix = ((int)floorf(dx)) & (POST_TEX - 1), iy = ((int)floorf(dy)) & (POST_TEX - 1), ix1 = (ix + 1) & (POST_TEX - 1), iy1 = (iy + 1) & (POST_TEX - 1);
+        float fx = dx - floorf(dx), fy = dy - floorf(dy);
+        float d0 = gfx_dirt_tex[iy * POST_TEX + ix] + (gfx_dirt_tex[iy * POST_TEX + ix1] - gfx_dirt_tex[iy * POST_TEX + ix]) * fx;
+        float d1 = gfx_dirt_tex[iy1 * POST_TEX + ix] + (gfx_dirt_tex[iy1 * POST_TEX + ix1] - gfx_dirt_tex[iy1 * POST_TEX + ix]) * fx;
+        float d = (d0 + (d1 - d0) * fy) / 255.0f;
+        float gm = 1.0f + P->grain * (n - 0.5f), dm = 1.0f + P->dirt * (d - 0.5f);
+        for (int c = 0; c < 3; c++) { float val = o[c] * gm * dm; fb[y][x][c] = val > 1 ? 1 : (val < 0 ? 0 : val); }
+    }
+}
+
 static void raster(void)
 {
     for (int y = 0; y < OH; y++) for (int x = 0; x < OW; x++) fb[y][x][0] = fb[y][x][1] = fb[y][x][2] = 0;
     const float S = (float)OW / VW;
     for (int s = 0; s < gfx_nseg; s++) {
         int mode = gfx_seg[s].mode;
+        if (mode == BL_POST) { post_apply(); continue; }
         for (int i = gfx_seg[s].start; i + 2 < gfx_seg[s].start + gfx_seg[s].count; i += 3) {
             const GVtx *v = &gfx_v[i];
             float x0 = v[0].x * S, y0 = v[0].y * S, x1 = v[1].x * S, y1 = v[1].y * S, x2 = v[2].x * S, y2 = v[2].y * S;
@@ -508,49 +591,101 @@ static void mix_sfx(int id, int pitch, float pan, float vol, int at)
     }
 }
 
-static void reel(int biome, int boss)
+typedef struct { int scene, biome, wave, lvl, ch; float secs; int s0, s1, s2, s3; } Shot;
+static const Shot SCRIPT[] = {
+    { SC_TITLE, 0, 0, 0, 0, 3.0f, 0, 0, 0, 0 },
+    { SC_PLAY, 0, 2, 2, CH_DRIFTER, 15.0f, W_REVOLVER, W_SCATTER, W_DYNAMITE, -1 },
+    { SC_PLAY, 1, 5, 3, CH_PREACHER, 15.0f, W_SCATTER, W_TESLA, W_GATLING, W_DYNAMITE },
+    { SC_PLAY, 2, 7, 4, CH_GRANNY, 17.0f, W_GATLING, W_DYNAMITE, W_TESLA, W_REVOLVER },
+    { SC_PLAY, 3, NWAVES, 6, CH_DOC, 17.0f, W_DYNAMITE, W_RAIL, W_SCATTER, W_TESLA },
+    { SC_PLAY, 4, 8, 6, CH_DRIFTER, 16.0f, W_RAIL, W_GATLING, W_TESLA, W_DYNAMITE },
+    { SC_PLAY, 4, NWAVES, 8, CH_DRIFTER, 16.0f, W_RAIL, W_GATLING, W_TESLA, W_DYNAMITE },
+};
+
+static void reel_setup(Game *g, const Shot *sh)
+{
+    if (sh->scene == SC_TITLE) { game_init(g); g->scene = SC_TITLE; return; }
+    game_init(g);
+    g->sv.biomes = 5;
+    g->bot = 2;
+    world_start_run(g, sh->biome, sh->ch);
+    Player *p = &g->p;
+    int sl[4] = { sh->s0, sh->s1, sh->s2, sh->s3 };
+    for (int k = 0; k < NSLOTS; k++) { p->slot[k] = (int8_t)sl[k]; if (sl[k] >= 0) p->wlvl[sl[k]] = (uint8_t)sh->lvl; }
+    p->sel = 0;
+    for (int u = 0; u < UP_HEAL; u++) p->up[u] = (uint8_t)(sh->lvl * 5 / 8);
+    g->wave = sh->wave;
+    g->run_t = (float)sh->wave * WAVE_TIME + 8.0f;
+    g->scene = SC_PLAY;
+    world_begin_wave(g);
+    /* get the field busy before the camera rolls */
+    for (int f = 0; f < 60 * 6; f++) { Input in; bot_input(g, &in, 1); in.pressed = in.held & ~prev_held; prev_held = in.held; game_update(g, &in, 1.0f / 60.0f); int q; float pa, vo; while (game_pop_sound(g, &q, &pa, &vo) >= 0) {} }
+}
+
+static void reel(int only, int boss)
 {
     Game *g = G;
-    setup_fight(g, biome, boss ? NWAVES : 5, boss ? 4 : 3);
-    g->bot = 2;
+    (void)boss;
     char dir[512];
     snprintf(dir, sizeof dir, "%s/reel", outdir);
-    amax = REEL_RATE * 120; amix = calloc((size_t)amax * 2, sizeof(float)); alen = 0;
+    amax = REEL_RATE * 130; amix = calloc((size_t)amax * 2, sizeof(float)); alen = 0;
     int frame = 0, sample = 0, mpos = 0;
     float mrate = 1.0f;
     int ep = -1;
-    while (frame < 30 * 40) {
-        for (int s = 0; s < 2; s++) {
-            Input in;
-            bot_input(g, &in, 1);
-            in.pressed = in.held & ~prev_held; prev_held = in.held;
-            game_update(g, &in, 1.0f / 60.0f);
-            int id, p; float pan, vol;
-            while ((id = game_pop_sound(g, &p, &pan, &vol)) >= 0) mix_sfx(id, p, pan, vol, sample);
-            float mv[MUS_TRACKS];
-            int pitch, epoch;
-            game_music(g, mv, &pitch, &epoch);
-            if (epoch != ep) { ep = epoch; mpos = 0; mrate = (float)pitch / 128.0f; }
-            int n = REEL_RATE / 60;
-            for (int i = 0; i < n && sample + i < amax; i++) {
-                float acc = 0;
-                for (int t = 0; t < MUS_TRACKS; t++) {
-                    if (mv[t] < 0.001f) continue;
-                    int L = music_len(t);
-                    float pos = (float)(mpos + i) * (float)MUS_RATE * mrate / (float)REEL_RATE;
-                    int k = (int)pos % L;
-                    acc += (float)music_data(t)[k] / 32768.0f * mv[t] * (float)music_volume(t) / 255.0f;
+    int nshots = (int)(sizeof SCRIPT / sizeof SCRIPT[0]);
+    for (int si = 0; si < nshots; si++) {
+        if (only >= 0 && si != only) continue;
+        const Shot *sh = &SCRIPT[si];
+        reel_setup(g, sh);
+        int frames = (int)(sh->secs * 30.0f);
+        float swap_t = 0;
+        for (int fr = 0; fr < frames; fr++) {
+            for (int s = 0; s < 2; s++) {
+                Input in;
+                memset(&in, 0, sizeof in);
+                if (g->scene == SC_PLAY) {
+                    bot_input(g, &in, 1);
+                    in.held &= ~(BTN_A | BTN_B | BTN_X | BTN_Y);
+                    swap_t += 1.0f / 60.0f;
+                    if (swap_t > 4.5f) {            /* show the guns off: swap every few seconds */
+                        swap_t = 0;
+                        static const uint32_t SB[NSLOTS] = { BTN_A, BTN_B, BTN_X, BTN_Y };
+                        for (int k = 1; k <= NSLOTS; k++) { int sl = (g->p.sel + k) % NSLOTS; if (g->p.slot[sl] >= 0) { in.held |= SB[sl]; break; } }
+                    }
+                    if (g->p.hp < g->p.maxhp * 0.45f) g->p.hp = g->p.maxhp * 0.45f;
                 }
-                amix[(sample + i) * 2] += acc * 0.5f; amix[(sample + i) * 2 + 1] += acc * 0.5f;
+                in.pressed = in.held & ~prev_held; prev_held = in.held;
+                game_update(g, &in, 1.0f / 60.0f);
+                int id, p; float pan, vol;
+                while ((id = game_pop_sound(g, &p, &pan, &vol)) >= 0) mix_sfx(id, p, pan, vol, sample);
+                float mv[MUS_TRACKS];
+                int pitch, epoch;
+                game_music(g, mv, &pitch, &epoch);
+                if (epoch != ep || sh->scene == SC_TITLE) { if (epoch != ep) { ep = epoch; mpos = 0; } mrate = (float)pitch / 128.0f; }
+                if (fr == 0 && s == 0) for (int t = 0; t < MUS_TRACKS; t++) G->mus[t] = mv[t];
+                int n = REEL_RATE / 60;
+                for (int i = 0; i < n && sample + i < amax; i++) {
+                    float acc = 0;
+                    for (int t = 0; t < MUS_TRACKS; t++) {
+                        if (mv[t] < 0.001f) continue;
+                        int L = music_len(t);
+                        float pos = (float)(mpos + i) * (float)MUS_RATE * mrate / (float)REEL_RATE;
+                        int k = (int)pos % L;
+                        acc += (float)music_data(t)[k] / 32768.0f * mv[t] * (float)music_volume(t) / 255.0f;
+                    }
+                    amix[(sample + i) * 2] += acc * 0.42f; amix[(sample + i) * 2 + 1] += acc * 0.42f;
+                }
+                mpos += n; sample += n;
             }
-            mpos += n; sample += n;
+            game_render(g);
+            raster();
+            char p[600];
+            snprintf(p, sizeof p, "%s/f%04d.ppm", dir, frame);
+            save_ppm(p);
+            frame++;
         }
-        game_render(g);
-        raster();
-        char p[600];
-        snprintf(p, sizeof p, "%s/f%04d.ppm", dir, frame);
-        save_ppm(p);
-        frame++;
+        printf("  reel: shot %d done (%d frames so far)\n", si, frame);
+        fflush(stdout);
     }
     alen = sample;
     char wp[600];
@@ -615,7 +750,7 @@ int main(int argc, char **argv)
         }
         return 0;
     }
-    if (!strcmp(what, "reel")) { reel(only < 0 ? 0 : only, argc > 4); return 0; }
+    if (!strcmp(what, "reel")) { reel(only, argc > 4); return 0; }
     if (!strcmp(what, "all") || !strcmp(what, "ui")) ui_test();
     if (!strcmp(what, "all") || !strcmp(what, "shots")) { printf("screenshots\n"); shots_biomes(only); shots_rest(); }
     if (!strcmp(what, "all") || !strcmp(what, "bots")) bots(only);

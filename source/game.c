@@ -106,6 +106,7 @@ void sfx(Game *g, int id, float x, float y, float vol, float jit)
 }
 
 void sfx_ui(Game *g, int id) { snd_push(g, id, 128, 0, 1.0f); }
+void snd_pitch(Game *g, int id, float pitch, float vol) { snd_push(g, id, (int)pitch, 0, vol); }
 
 int game_pop_sound(Game *g, int *pitch, float *pan, float *vol)
 {
@@ -397,7 +398,7 @@ static void place_weapon(Game *g, int w, int slot)
     if (p->slot[p->sel] < 0) p->sel = slot;
     g->pick_weapon = -1;
     g->shop_flash = 0.5f;
-    sfx_ui(g, SFX_BUY);
+    sfx_ui(g, SFX_BUY); sfx_ui(g, SFX_STING);
 }
 
 static void shop_update(Game *g, const Input *in)
@@ -430,7 +431,7 @@ static void shop_update(Game *g, const Input *in)
         p->cash -= cost;
         p->wlvl[w]++;
         g->shop_flash = 0.5f;
-        sfx_ui(g, SFX_BUY);
+        sfx_ui(g, SFX_CASHREG); sfx_ui(g, SFX_LEVELUP);
         return;
     }
     int u = i - NWEAP, cost = upgrade_cost(g, u);
@@ -442,7 +443,7 @@ static void shop_update(Game *g, const Input *in)
         if (u == UP_VITAL) { p->maxhp += 20.0f; p->hp += 20.0f; }
     }
     g->shop_flash = 0.5f;
-    sfx_ui(g, SFX_BUY);
+    sfx_ui(g, SFX_CASHREG);
 }
 
 /* ---- pause ---- */
@@ -535,18 +536,51 @@ void game_update(Game *g, const Input *in, float dt)
     music_mix(g, dt);
 }
 
+/* the grade for each biome: what the washed-out colour leans towards */
+static const uint32_t GRADE[NBIOMES] = { 0xE8C49AFFu, 0xA8C0A0FFu, 0x98A8C4FFu, 0xD09A84FFu, 0xB094C0FFu };
+static const float DESAT[NBIOMES] = { 0.38f, 0.46f, 0.52f, 0.46f, 0.5f };
+
+static void post_world(const Game *g)
+{
+    GfxPost P;
+    uint32_t h = hash32((uint32_t)(g->t * 60.0f) * 2654435761u);
+    P.gu = (float)(h & 1023) / 1024.0f; P.gv = (float)((h >> 10) & 1023) / 1024.0f;
+    float hurt = clampf(g->red, 0, 1);
+    P.split = 0.9f + g->shake * 3.5f + hurt * 3.0f + g->flash * 2.0f + g->chaos * 0.5f + (g->p.stand_t > 0 ? 2.0f : 0.0f);
+    P.blur = clampf(g->shake * g->shake * 0.5f + hurt * 0.2f, 0, 0.5f);
+    P.blur_edge = 0.8f;
+    P.desat = DESAT[g->biome] + (g->p.hp > 0 && g->p.hp < g->p.maxhp * 0.3f ? 0.2f : 0.0f) + (g->p.hp <= 0 ? 0.35f : 0.0f);
+    P.tint = GRADE[g->biome];
+    if (g->p.stand_t > 0) P.tint = 0xFF9080FFu;
+    P.grain = 0.34f;
+    P.dirt = 0.45f;
+    if (g->scene == SC_PAUSE || g->scene == SC_SHOP || g->scene == SC_CLEAR) { P.blur = 0.9f; P.blur_edge = 0.2f; P.split = 2.0f; P.desat += 0.2f; }
+    gfx_post(&P);
+}
+
+static void post_menu(const Game *g)
+{
+    GfxPost P;
+    uint32_t h = hash32((uint32_t)(g->t * 60.0f) * 2654435761u);
+    P.gu = (float)(h & 1023) / 1024.0f; P.gv = (float)((h >> 10) & 1023) / 1024.0f;
+    P.split = 1.4f; P.blur = 0; P.blur_edge = 0.45f; P.desat = 0.3f; P.tint = 0xE0C8A8FFu; P.grain = 0.32f; P.dirt = 0.45f;
+    gfx_post(&P);
+}
+
 void game_render(const Game *g)
 {
     gfx_begin();
     switch (g->scene) {
-    case SC_PLAY: case SC_PAUSE: case SC_INTRO:
+    case SC_PLAY: case SC_PAUSE: case SC_INTRO: case SC_SHOP: case SC_CLEAR:
         draw_world(g);
-        hud_draw(g);
+        post_world(g);
+        draw_lens(g);
+        if (g->scene == SC_PLAY || g->scene == SC_PAUSE || g->scene == SC_INTRO) hud_draw(g);
+        hud_menus(g);
         break;
-    case SC_SHOP: case SC_CLEAR:
-        draw_world(g);
+    default:
+        hud_menus(g);
+        post_menu(g);
         break;
-    default: break;
     }
-    hud_menus(g);
 }

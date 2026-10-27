@@ -8,43 +8,45 @@
 #include <stdio.h>
 
 void hurt_player(Game *g, float dmg, float fx, float fy);
+static uint32_t srng = 0x51ED270Bu;
+static float frand01_static(void) { srng ^= srng << 13; srng ^= srng >> 17; srng ^= srng << 5; return (float)(srng >> 8) / 16777216.0f; }
 
 /* ------------------------------------------------------------------ */
 /* the bestiary                                                         */
 /* ------------------------------------------------------------------ */
-/*                 name               ai        hp    spd   r     dmg  $   mass  body        body2       eye */
+/*                 name               ai        hp    spd   r     dmg  $   mass  body        body2       eye         blood */
 const EnemyDef EDEF[A_COUNT] = {
     /* 1 DUST GULCH */
-    { "SKELETON BANDIT", AI_WALK,  22,   54,  11,  10,  1,  1.0f, 0xE8DCC0FFu, 0x8A3A2AFFu, 0xFF4030FFu },
-    { "BUZZARD",         AI_FLY,   12,  104,   9,   7,  1,  0.5f, 0x5A3A28FFu, 0xD8A0A0FFu, 0xFFD040FFu },
-    { "CACTUS GOLEM",    AI_TANK, 130,   34,  18,  18,  4,  4.0f, 0x4E8A3AFFu, 0x2E5A26FFu, 0xFFE070FFu },
-    { "BONE SLINGER",    AI_SHOOT, 30,   46,  11,   9,  2,  1.0f, 0xE8DCC0FFu, 0xD86A2AFFu, 0xFF4030FFu },
+    { "SKELETON BANDIT", AI_WALK,  22,   54,  11,  10,  1,  1.0f, 0xE8DCC0FFu, 0x8A3A2AFFu, 0xFF4030FFu, 0x6A0C0CFFu },
+    { "BUZZARD",         AI_FLY,   12,  104,   9,   7,  1,  0.5f, 0x5A3A28FFu, 0xD8A0A0FFu, 0xFFD040FFu, 0x8A0A0AFFu },
+    { "CACTUS GOLEM",    AI_TANK, 130,   34,  18,  18,  4,  4.0f, 0x4E8A3AFFu, 0x2E5A26FFu, 0xFFE070FFu, 0x5A7A20FFu },
+    { "BONE SLINGER",    AI_SHOOT, 30,   46,  11,   9,  2,  1.0f, 0xE8DCC0FFu, 0xD86A2AFFu, 0xFF4030FFu, 0x6A0C0CFFu },
     /* 2 ROTWOOD BAYOU */
-    { "BOG TOAD",        AI_HOP,   26,   70,  12,  10,  1,  1.2f, 0x4A7A3AFFu, 0x2C4A24FFu, 0xFFD030FFu },
-    { "SWAMP CROW",      AI_FLY,   14,  125,   9,   7,  1,  0.5f, 0x22302AFFu, 0x3A6A4AFFu, 0x60FF90FFu },
-    { "MOSS BRUTE",      AI_TANK, 150,   32,  19,  20,  4,  4.5f, 0x5A6A48FFu, 0x34442CFFu, 0x8CFF60FFu },
-    { "PLAGUE LANTERN",  AI_SHOOT, 32,   44,  11,  10,  2,  1.0f, 0x3A2A5AFFu, 0x1A1424FFu, 0x40FF80FFu },
+    { "BOG TOAD",        AI_HOP,   26,   70,  12,  10,  1,  1.2f, 0x4A7A3AFFu, 0x2C4A24FFu, 0xFFD030FFu, 0x7A1A0CFFu },
+    { "SWAMP CROW",      AI_FLY,   14,  125,   9,   7,  1,  0.5f, 0x22302AFFu, 0x3A6A4AFFu, 0x60FF90FFu, 0x7A0A0AFFu },
+    { "MOSS BRUTE",      AI_TANK, 150,   32,  19,  20,  4,  4.5f, 0x5A6A48FFu, 0x34442CFFu, 0x8CFF60FFu, 0x4A6A1AFFu },
+    { "PLAGUE LANTERN",  AI_SHOOT, 32,   44,  11,  10,  2,  1.0f, 0x3A2A5AFFu, 0x1A1424FFu, 0x40FF80FFu, 0x6A0A0AFFu },
     /* 3 GRAVEWATCH */
-    { "ROTTING ZOMBIE",  AI_WALK,  30,   48,  11,  12,  1,  1.2f, 0x7A9A6AFFu, 0x3A4A6AFFu, 0xFF3020FFu },
-    { "BONE SWARM",      AI_FAST,  12,  120,   8,   7,  1,  0.5f, 0xE8E4D8FFu, 0x6A6460FFu, 0xFF3020FFu },
-    { "COFFIN KNIGHT",   AI_TANK, 170,   36,  18,  20,  5,  5.0f, 0x3A3A44FFu, 0x5A5A68FFu, 0xFF2020FFu },
-    { "GRAVE WRAITH",    AI_SHOOT, 34,   58,  11,  10,  2,  0.8f, 0xE8F0F4FFu, 0xA8C0D0FFu, 0x40E8FFFFu },
+    { "ROTTING ZOMBIE",  AI_WALK,  30,   48,  11,  12,  1,  1.2f, 0x7A9A6AFFu, 0x3A4A6AFFu, 0xFF3020FFu, 0x4A0A06FFu },
+    { "BONE SWARM",      AI_FAST,  12,  120,   8,   7,  1,  0.5f, 0xE8E4D8FFu, 0x6A6460FFu, 0xFF3020FFu, 0x5A0A0AFFu },
+    { "COFFIN KNIGHT",   AI_TANK, 170,   36,  18,  20,  5,  5.0f, 0x3A3A44FFu, 0x5A5A68FFu, 0xFF2020FFu, 0x4A0606FFu },
+    { "GRAVE WRAITH",    AI_SHOOT, 34,   58,  11,  10,  2,  0.8f, 0xE8F0F4FFu, 0xA8C0D0FFu, 0x40E8FFFFu, 0x5AB0C0FFu },
     /* 4 ASHEN HOLLOW */
-    { "CHARRED HUSK",    AI_WALK,  34,   56,  11,  12,  1,  1.2f, 0x2A2220FFu, 0xFF7020FFu, 0xFFA020FFu },
-    { "FIRE IMP",        AI_FAST,  14,  128,   9,   8,  1,  0.5f, 0xD83020FFu, 0xFFB030FFu, 0xFFF080FFu },
-    { "ASH HULK",        AI_TANK, 200,   34,  20,  24,  5,  5.0f, 0x4A4442FFu, 0xFF5018FFu, 0xFF8020FFu },
-    { "PLAGUE DOCTOR",   AI_SHOOT, 38,   46,  11,  11,  2,  1.0f, 0x1E1A20FFu, 0xE8E0D0FFu, 0x70FF40FFu },
+    { "CHARRED HUSK",    AI_WALK,  34,   56,  11,  12,  1,  1.2f, 0x2A2220FFu, 0xFF7020FFu, 0xFFA020FFu, 0x5A0A04FFu },
+    { "FIRE IMP",        AI_FAST,  14,  128,   9,   8,  1,  0.5f, 0xD83020FFu, 0xFFB030FFu, 0xFFF080FFu, 0x9A1004FFu },
+    { "ASH HULK",        AI_TANK, 200,   34,  20,  24,  5,  5.0f, 0x4A4442FFu, 0xFF5018FFu, 0xFF8020FFu, 0x5A0806FFu },
+    { "PLAGUE DOCTOR",   AI_SHOOT, 38,   46,  11,  11,  2,  1.0f, 0x1E1A20FFu, 0xE8E0D0FFu, 0x70FF40FFu, 0x5A0A0AFFu },
     /* 5 HELLMOUTH */
-    { "SHADOW CRAWLER",  AI_WALK,  40,   62,  12,  13,  1,  1.2f, 0x140E18FFu, 0x3A1A30FFu, 0xFF2040FFu },
-    { "EYE WISP",        AI_FLY,   18,  130,   9,   9,  1,  0.5f, 0xF0E8E8FFu, 0x9A30FFFFu, 0xFF2030FFu },
-    { "FLESH HULK",      AI_TANK, 230,   36,  21,  26,  6,  5.0f, 0xB04A5AFFu, 0x6A1A2AFFu, 0xFFE040FFu },
-    { "VOID PRIEST",     AI_SHOOT, 42,   48,  12,  12,  3,  1.0f, 0x2A1240FFu, 0xB040FFFFu, 0xFF40FFFFu },
+    { "SHADOW CRAWLER",  AI_WALK,  40,   62,  12,  13,  1,  1.2f, 0x140E18FFu, 0x3A1A30FFu, 0xFF2040FFu, 0x3A0420FFu },
+    { "EYE WISP",        AI_FLY,   18,  130,   9,   9,  1,  0.5f, 0xF0E8E8FFu, 0x9A30FFFFu, 0xFF2030FFu, 0x9A0A1AFFu },
+    { "FLESH HULK",      AI_TANK, 230,   36,  21,  26,  6,  5.0f, 0xB04A5AFFu, 0x6A1A2AFFu, 0xFFE040FFu, 0x9A0A14FFu },
+    { "VOID PRIEST",     AI_SHOOT, 42,   48,  12,  12,  3,  1.0f, 0x2A1240FFu, 0xB040FFFFu, 0xFF40FFFFu, 0x5A0A3AFFu },
     /* bosses */
-    { "THE BONE SHERIFF",   AI_BOSS, 3400, 60, 40, 22, 120, 40.0f, 0xEDE2C8FFu, 0x7A4A2AFFu, 0xFF4020FFu },
-    { "THE BOG MOTHER",     AI_BOSS, 3800, 50, 48, 24, 160, 50.0f, 0x4E7E3CFFu, 0xD8C080FFu, 0xFFD020FFu },
-    { "THE UNDERTAKER",     AI_BOSS, 4200, 56, 42, 26, 200, 50.0f, 0x24222AFFu, 0xD8D4CCFFu, 0xFF2020FFu },
-    { "THE PLAGUE PROPHET", AI_BOSS, 4600, 54, 46, 28, 240, 50.0f, 0x2A2030FFu, 0xEDE4D2FFu, 0x70FF40FFu },
-    { "THE MAW",            AI_BOSS, 5200, 40, 54, 30, 300, 80.0f, 0x7A1A2AFFu, 0xF0E8E0FFu, 0xFF3020FFu },
+    { "THE BONE SHERIFF",   AI_BOSS, 3400, 60, 40, 22, 120, 40.0f, 0xEDE2C8FFu, 0x7A4A2AFFu, 0xFF4020FFu, 0x6A0C0CFFu },
+    { "THE BOG MOTHER",     AI_BOSS, 3800, 50, 48, 24, 160, 50.0f, 0x4E7E3CFFu, 0xD8C080FFu, 0xFFD020FFu, 0x6A1A0CFFu },
+    { "THE UNDERTAKER",     AI_BOSS, 4200, 56, 42, 26, 200, 50.0f, 0x24222AFFu, 0xD8D4CCFFu, 0xFF2020FFu, 0x4A0606FFu },
+    { "THE PLAGUE PROPHET", AI_BOSS, 4600, 54, 46, 28, 240, 50.0f, 0x2A2030FFu, 0xEDE4D2FFu, 0x70FF40FFu, 0x5A0A0AFFu },
+    { "THE MAW",            AI_BOSS, 5200, 40, 54, 30, 300, 80.0f, 0x7A1A2AFFu, 0xF0E8E0FFu, 0xFF3020FFu, 0x9A0A14FFu },
 };
 
 /* ------------------------------------------------------------------ */
@@ -101,7 +103,79 @@ static void add_decal(Game *g, float x, float y, float r, uint32_t c, int kind)
 {
     Decal *d = &g->dec[g->ndec_next];
     g->ndec_next = (g->ndec_next + 1) % MAX_DECAL;
-    d->x = x; d->y = y; d->r = r; d->rot = frand01(g) * TAU_F; d->life = 40.0f; d->c = c; d->kind = (uint8_t)kind;
+    d->x = x; d->y = y; d->r = r; d->rot = frand01(g) * TAU_F; d->life = kind == DC_SPOT ? 30.0f : 45.0f; d->c = c; d->kind = (uint8_t)kind; d->age = 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* gore                                                                 */
+/* ------------------------------------------------------------------ */
+static uint32_t blood_of(int type) { return EDEF[type].blood; }
+
+/* what each monster sounds like going down, and grumbling on its way in */
+static int death_voice(int type)
+{
+    switch (type) {
+    case A_BUZZARD: case A_CROW: return SFX_CAW;
+    case A_TOAD: return SFX_CROAK;
+    case A_ZOMBIE: case A_CACTUS: return frand01_static() < 0.5f ? SFX_GROAN : SFX_GROAN2;
+    case A_MOSS: case A_HULK: case A_FLESH: return SFX_GROWL;
+    case A_WRAITH: case A_PRIEST: return SFX_WAIL;
+    case A_HUSK: case A_CRAWLER: return SFX_HISS;
+    case A_EYE: return SFX_GURGLE;
+    case A_IMP: case A_BONES: return SFX_SHRIEK;
+    default: return SFX_SCREAM;
+    }
+}
+static int chatter_voice(int type)
+{
+    switch (type) {
+    case A_BUZZARD: case A_CROW: return SFX_CAW;
+    case A_TOAD: return SFX_CROAK;
+    case A_ZOMBIE: return SFX_GROAN;
+    case A_CACTUS: case A_MOSS: case A_HULK: case A_FLESH: return SFX_GROWL;
+    case A_WRAITH: case A_PRIEST: return SFX_WAIL;
+    case A_HUSK: case A_CRAWLER: case A_LANTERN: case A_DOCTOR: return SFX_HISS;
+    case A_EYE: return SFX_GURGLE;
+    case A_IMP: case A_BONES: return SFX_SHRIEK;
+    case A_COFFIN: return SFX_CHAINS;
+    default: return SFX_SNARL;
+    }
+}
+
+/* droplets flying out along (kx, ky); they arc, land and stain the ground */
+static void blood_spray(Game *g, float x, float y, float kx, float ky, int n, uint32_t c, float force)
+{
+    for (int k = 0; k < n; k++) {
+        float a = atan2f(ky, kx) + frands(g) * (kx == 0 && ky == 0 ? 3.14f : 0.7f), s = (50.0f + frand01(g) * 170.0f) * force;
+        Particle *q = add_particle(g, PT_BLOOD, x + frands(g) * 3, y + frands(g) * 3, cosf(a) * s, sinf(a) * s * 0.7f, 2.0f, 1.2f + frand01(g) * 1.6f, c, col_mix(c, 0x000000FFu, 0.4f), 0);
+        q->z = 6.0f + frand01(g) * 8.0f; q->vz = 40.0f + frand01(g) * 120.0f * force;
+    }
+    add_particle(g, PT_MIST, x, y - 6, kx * 40.0f, ky * 40.0f - 10.0f, 0.35f + frand01(g) * 0.2f, 5.0f + force * 4.0f, col_a(c, 0.55f), c & 0xFFFFFF00u, 0);
+}
+
+static void add_corpse(Game *g, const Enemy *e, float kx, float ky)
+{
+    Corpse *c = &g->corpse[g->ncorpse_next];
+    g->ncorpse_next = (g->ncorpse_next + 1) % MAX_CORPSE;
+    c->x = e->x + kx * 8.0f; c->y = e->y + ky * 6.0f + e->r * 0.4f; c->s = art_scale(e);
+    c->face = e->face;
+    float side = (kx * e->face) > 0 ? 1.0f : -1.0f;               /* falls the way it was hit */
+    c->rot = side * (1.25f + frand01(g) * 0.4f) * (e->face < 0 ? -1.0f : 1.0f);
+    c->life = EDEF[e->type].ai == AI_BOSS ? 60.0f : 26.0f;
+    c->seed = (uint32_t)(e->x * 13.0f + e->y * 7.0f);
+    c->type = e->type; c->alive = 1; c->headless = 0;
+}
+
+static void lens_blood(Game *g, int n)
+{
+    for (int k = 0; k < n; k++) {
+        Lens *l = &g->lens[g->nlens_next];
+        g->nlens_next = (g->nlens_next + 1) % MAX_LENS;
+        float a = frand01(g) * TAU_F;
+        l->x = VW * 0.5f + cosf(a) * VW * (0.25f + frand01(g) * 0.22f);
+        l->y = VH * 0.5f + sinf(a) * VH * (0.2f + frand01(g) * 0.25f);
+        l->r = 14.0f + frand01(g) * 34.0f; l->t = 0; l->drip = 0; l->seed = g->rng;
+    }
 }
 
 static void add_fire(Game *g, float x, float y, float r, float life, float dps, int enemy)
@@ -222,11 +296,28 @@ static int hurt_enemy(Game *g, int i, float dmg, int crit, float kx, float ky, f
     dmg *= e->dmgmul;
     e->hp -= dmg;
     e->flash = 0.09f;
+    e->hurt = 0.3f;
+    {
+        int bl = 1 + (int)(dmg / 12.0f);
+        if (bl > 5) bl = 5;
+        if (g->npt < MAX_PT * 3 / 4 || frand01(g) < 0.3f) blood_spray(g, e->x, e->y - e->r * 0.3f, kx, ky, bl, blood_of(e->type), 1.0f);
+        if (e->hp - dmg > 0) {
+            int w = (int)((1.0f - (e->hp - dmg) / e->maxhp) * 4.6f);
+            if (w > 4) w = 4;
+            if (w > e->wounds) e->wounds = (uint8_t)w;
+        }
+    }
     float km = kb / (EDEF[e->type].mass * (e->elite ? 2.5f : 1.0f));
     if (EDEF[e->type].ai == AI_BOSS) km *= 0.1f;
     e->vx += kx * km; e->vy += ky * km;
     if (dmg >= 1.0f && (crit ? frand01(g) < 0.7f : frand01(g) < 0.22f)) add_number(g, e->x, e->y - e->r, (int)(dmg + 0.5f), crit, 0);
-    if (g->snd_cool[SFX_HIT] <= 0) { sfx(g, SFX_HIT, e->x, e->y, 0.45f, 0.25f); g->snd_cool[SFX_HIT] = 0.045f; }
+    if (g->snd_cool[SFX_HIT] <= 0) {
+        static const int H[3] = { SFX_HIT, SFX_HIT2, SFX_HIT3 };
+        sfx(g, H[irand(g, 3)], e->x, e->y, 0.5f, 0.25f);
+        g->snd_cool[SFX_HIT] = 0.03f;
+    }
+    if (dmg > 60.0f && g->snd_cool[SFX_SPRAY] <= 0) { sfx(g, SFX_SPRAY, e->x, e->y, 0.6f, 0.2f); g->snd_cool[SFX_SPRAY] = 0.15f; }
+    if (EDEF[e->type].ai == AI_BOSS && g->bosshurt_t <= 0) { g->bosshurt_t = 1.4f + frand01(g); sfx(g, frand01(g) < 0.5f ? SFX_GROWL : SFX_SNARL, e->x, e->y, 0.9f, 0.1f); }
     if (e->hp <= 0) { kill_enemy(g, i, kx, ky); return 1; }
     return 0;
 }
@@ -239,7 +330,7 @@ static void explode(Game *g, float x, float y, float rad, float dmg, int big, in
     add_boom(g, x, y, rad, big, kind);
     uint32_t c0 = kind == 1 ? 0x80FF50FFu : (kind == 2 ? 0xC060FFFFu : 0xFFD070FFu);
     uint32_t c1 = kind == 1 ? 0x206020FFu : (kind == 2 ? 0x401060FFu : 0xFF4010FFu);
-    int nf = big ? 26 : 12;
+    int nf = big ? 16 : 8;
     for (int k = 0; k < nf; k++) {                            /* the fireball */
         float a = frand01(g) * TAU_F, s = (0.3f + frand01(g)) * rad * 2.4f;
         add_particle(g, PT_FIRE, x, y, cosf(a) * s, sinf(a) * s, 0.35f + frand01(g) * 0.35f, rad * (0.25f + frand01(g) * 0.25f), c0, c1, 1);
@@ -262,8 +353,10 @@ static void explode(Game *g, float x, float y, float rad, float dmg, int big, in
     add_decal(g, x, y, rad * 0.75f, kind == 1 ? 0x10301888u : 0x0A080690u, 0);
     add_shake(g, big ? 0.55f : 0.22f);
     g->chaos = clampf(g->chaos + (big ? 0.08f : 0.03f), 0, 1);
-    if (big) { g->flash = fmaxf(g->flash, 0.35f); g->flash_r = 1.0f; g->flash_g = 0.75f; g->flash_b = 0.4f; }
+    if (big) { g->flash = fmaxf(g->flash, 0.2f); g->flash_r = 1.0f; g->flash_g = 0.75f; g->flash_b = 0.4f; }
     sfx(g, big ? SFX_BOOM_BIG : SFX_BOOM, x, y, big ? 1.0f : 0.75f, 0.12f);
+    if (big && g->snd_cool[SFX_TAIKO] <= 0) { sfx(g, SFX_TAIKO, x, y, 0.8f, 0.1f); g->snd_cool[SFX_TAIKO] = 0.2f; }
+    if (dmg > 0 && g->snd_cool[SFX_RICOCHET] <= 0 && frand01(g) < 0.4f) { sfx(g, SFX_RICOCHET, x + frands(g) * 80, y, 0.4f, 0.3f); g->snd_cool[SFX_RICOCHET] = 0.12f; }
 
     if (dmg > 0) {
         FOR_NEAR(g, x, y, rad, i) {
@@ -271,7 +364,9 @@ static void explode(Game *g, float x, float y, float rad, float dmg, int big, in
             float d2 = dist2(x, y, e->x, e->y), rr = rad + e->r;
             if (d2 > rr * rr) continue;
             float d = sqrtf(d2) + 1e-3f, fall = 1.0f - 0.5f * clampf(d / rr, 0, 1);
+            g->gibbing = 1;
             hurt_enemy(g, i, dmg * fall, roll_crit(g), (e->x - x) / d, (e->y - y) / d, big ? 520.0f : 300.0f);
+            g->gibbing = 0;
         }
         /* chain reaction: powder kegs */
         for (int k = 0; k < MAX_BARREL; k++) {
@@ -318,10 +413,11 @@ void hurt_player(Game *g, float dmg, float fx, float fy)
 {
     Player *p = &g->p;
     if (p->inv > 0 || p->dash_t > 0 || g->phase == PH_BOSSDEAD || g->phase == PH_WAVEEND) return;
-    if (g->bot == 2) return;      /* test harness: the screenshot bot can't die */
+    if (g->bot == 2) dmg *= 0.25f;   /* test harness: the screenshot bot bleeds but doesn't die */
     dbg_hurt[dbg_hurt_src & 3] += dmg;
     dmg *= 1.0f - 0.08f * (float)p->up[UP_ARMOR] - (p->character == CH_GRANNY ? 0.15f : 0.0f);
     p->hp -= dmg;
+    if (g->bot == 2 && p->hp < p->maxhp * 0.3f) p->hp = p->maxhp * 0.3f;
     p->inv = 0.7f;
     p->hurt_t = 0.3f;
     float dx = p->x - fx, dy = p->y - fy, l = sqrtf(dx * dx + dy * dy) + 1e-3f;
@@ -330,10 +426,9 @@ void hurt_player(Game *g, float dmg, float fx, float fy)
     g->red = fmaxf(g->red, 0.55f);
     g->combo = 0;
     sfx(g, SFX_HURT, p->x, p->y, 1.0f, 0.1f);
-    for (int k = 0; k < 10; k++) {
-        float a = frand01(g) * TAU_F, s = 60 + frand01(g) * 160;
-        add_particle(g, PT_GOO, p->x, p->y, cosf(a) * s, sinf(a) * s, 0.5f, 2.5f, 0xC81818FFu, 0x600808FFu, 0);
-    }
+    blood_spray(g, p->x, p->y - 6, p->x - fx, p->y - fy, 14, 0x8A0A0AFFu, 1.3f);
+    add_decal(g, p->x, p->y + 6, 9.0f, 0x6A0606B0u, DC_POOL);
+    lens_blood(g, 1 + (dmg > 15.0f) + (p->hp < p->maxhp * 0.35f));
     if (p->hp <= 0) {
         if (p->stands > 0) last_stand(g);
         else p->hp = 0;
@@ -378,6 +473,9 @@ static void gib(Game *g, const Enemy *e, float kx, float ky, int n)
         float vx = cosf(a) * s + kx * 160.0f, vy = sinf(a) * s + ky * 160.0f;
         if (bony && (k & 1)) {
             add_particle(g, PT_BONE, e->x, e->y, vx, vy, 1.2f + frand01(g), 4.0f + frand01(g) * 3.0f, 0xEDE4D0FFu, 0x9A9080FFu, 0)->vz = 100 + frand01(g) * 160;
+        } else if (k % 3 == 0) {
+            Particle *q = add_particle(g, PT_GIB, e->x, e->y, vx * 0.8f, vy * 0.6f, 1.6f + frand01(g), 2.0f + frand01(g) * 2.5f, (k % 2) ? d->c0 : d->c1, d->blood, 0);
+            q->z = 8; q->vz = 120 + frand01(g) * 180;
         } else {
             add_particle(g, PT_GOO, e->x, e->y, vx, vy, 0.5f + frand01(g) * 0.5f, 2.0f + frand01(g) * 3.0f, (k % 3) ? d->c0 : d->c1, d->c1, 0);
         }
@@ -394,14 +492,53 @@ static void kill_enemy(Game *g, int i, float kx, float ky)
     g->combo++;
     g->combo_t = 2.5f;
     if (g->combo > g->best_combo) g->best_combo = g->combo;
-    if (g->combo == 100 || g->combo == 250 || g->combo == 500 || g->combo == 1000) {
-        announce(g, g->combo >= 500 ? "UNSTOPPABLE!" : (g->combo >= 250 ? "MASSACRE!" : "RAMPAGE!"), 0xFFD040FFu, SFX_V_RAMPAGE);
+    /* the pinball layer: a rising chime every 10 in the combo, a sting and a shout every 50 */
+    if (g->combo % 10 == 0) {
+        static const int SC[11] = { 0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24 };
+        int k = (g->combo / 10 - 1) % 11;
+        snd_pitch(g, SFX_CHIME, 128.0f * powf(2.0f, (float)SC[k] / 12.0f), 0.8f);
+    }
+    if (g->combo % 50 == 0) {
+        static const char *const TXT[] = { "KILLING SPREE!", "RAMPAGE!", "SPLATTER!", "OVERKILL!", "MASSACRE!", "BLOODBATH!", "UNSTOPPABLE!", "GODLIKE!" };
+        static const int VO[] = { SFX_V_SPREE, SFX_V_RAMPAGE, SFX_V_SPLATTER, SFX_V_OVERKILL, SFX_V_CARNAGE, SFX_V_BLOODBATH, SFX_V_GODLIKE, SFX_V_GODLIKE };
+        int k = g->combo / 50 - 1;
+        if (k > 7) k = 7;
+        announce(g, TXT[k], 0xFFD040FFu, VO[k]);
+        sfx_ui(g, SFX_STING);
+        g->vo_t = 2.0f;
+    }
+    /* multi-kills: a burst of kills inside a breath */
+    g->mk_count = g->mk_t > 0 ? g->mk_count + 1 : 1;
+    g->mk_t = 0.45f;
+    {
+        static const int TH[5] = { 6, 12, 22, 36, 60 };
+        static const char *const MT[5] = { "MULTI KILL!", "MEGA KILL!", "CARNAGE!", "BLOODBATH!", "GODLIKE!" };
+        static const int MV[5] = { SFX_V_MULTI, SFX_V_MEGA, SFX_V_CARNAGE, SFX_V_BLOODBATH, SFX_V_GODLIKE };
+        for (int k = 4; k >= 0; k--)
+            if (g->mk_count == TH[k] && g->mk_level <= k) {
+                g->mk_level = k + 1;
+                if (g->vo_t <= 0 || k >= 2) { announce(g, MT[k], 0xFF6030FFu, MV[k]); g->vo_t = 1.5f; }
+                sfx_ui(g, k >= 1 ? SFX_TAIKO : SFX_STING);
+                break;
+            }
     }
     g->chaos = clampf(g->chaos + 0.012f, 0, 1);
 
     int boss = d->ai == AI_BOSS;
-    gib(g, e, kx, ky, boss ? 60 : (e->elite ? 24 : (d->mass > 2 ? 14 : 8)));
-    add_decal(g, e->x, e->y, e->r * (boss ? 2.2f : 1.1f), (d->c1 & 0xFFFFFF00u) | 0x70u, 1);
+    int pieces = g->gibbing || boss || frand01(g) < 0.25f;      /* blown apart, or left lying there */
+    gib(g, e, kx, ky, (boss ? 60 : (e->elite ? 24 : (d->mass > 2 ? 14 : 8))) * (pieces ? 2 : 1) / 2 + 2);
+    uint32_t bc = d->blood;
+    blood_spray(g, e->x, e->y - e->r * 0.3f, kx, ky, (boss ? 40 : (pieces ? 16 : 9)), bc, pieces ? 1.6f : 1.1f);
+    blood_spray(g, e->x, e->y - e->r * 0.3f, 0, 0, pieces ? 6 : 3, bc, 0.6f);
+    add_decal(g, e->x, e->y + e->r * 0.3f, e->r * (boss ? 2.6f : (pieces ? 1.6f : 1.2f)), (bc & 0xFFFFFF00u) | 0xC8u, DC_POOL);
+    if (kx != 0 || ky != 0) { add_decal(g, e->x + kx * e->r, e->y + ky * e->r, e->r * 1.4f, (bc & 0xFFFFFF00u) | 0xA0u, DC_SMEAR); g->dec[(g->ndec_next + MAX_DECAL - 1) % MAX_DECAL].rot = atan2f(ky, kx); }
+    if (!pieces || boss) add_corpse(g, e, kx, ky);
+    if (pieces && !boss && frand01(g) < 0.5f && d->ai != AI_FLY && e->type != A_WRAITH && e->type != A_CRAWLER && e->type != A_EYE) {
+        Particle *q = add_particle(g, PT_HEAD, e->x, e->y - e->r, kx * 120 + frands(g) * 80, ky * 90 - 40, 3.0f, art_scale(e), d->c0, (uint32_t)e->type, 0);
+        q->z = 14; q->vz = 200 + frand01(g) * 120; q->vr = frands(g) * 14; q->rot = e->face;
+        if (g->snd_cool[SFX_HEADPOP] <= 0) { sfx(g, SFX_HEADPOP, e->x, e->y, 0.8f, 0.2f); g->snd_cool[SFX_HEADPOP] = 0.2f; }
+        if (g->vo_t <= 0 && frand01(g) < 0.12f) { sfx_ui(g, SFX_V_HEADSHOT); g->vo_t = 5.0f; }
+    }
     for (int k = 0; k < (boss ? 3 : 1); k++)
         add_particle(g, PT_SOUL, e->x, e->y - 6, frands(g) * 20.0f, -40.0f, 0.8f, e->r * 0.8f, d->eye, 0, 1);
 
@@ -415,10 +552,17 @@ static void kill_enemy(Game *g, int i, float kx, float ky)
     else if (r < 0.010f * hpneed + 0.0055f) new_pickup(g, PU_NUKE, e->x, e->y, 0);
     else if (r < 0.010f * hpneed + 0.0080f) new_pickup(g, PU_FRENZY, e->x, e->y, 0);
 
-    if (g->snd_cool[SFX_SPLAT] <= 0) {
-        int bony = e->type == A_BANDIT || e->type == A_SLINGER || e->type == A_BONES;
-        sfx(g, bony ? SFX_BONES : SFX_SPLAT, e->x, e->y, 0.55f, 0.3f);
-        g->snd_cool[SFX_SPLAT] = 0.06f;
+    /* it dies loudly: a splat (or gore when it comes apart), a crunch for the bony ones, and its own last noise */
+    {
+        int bony = e->type == A_BANDIT || e->type == A_SLINGER || e->type == A_BONES || e->type == A_BOSS1;
+        if (g->snd_cool[SFX_SPLAT] <= 0) {
+            static const int SP[3] = { SFX_SPLAT, SFX_SPLAT2, SFX_SPLAT3 };
+            sfx(g, pieces && g->snd_cool[SFX_GORE] <= 0 ? SFX_GORE : SP[irand(g, 3)], e->x, e->y, 0.7f, 0.25f);
+            if (pieces) g->snd_cool[SFX_GORE] = 0.09f;
+            g->snd_cool[SFX_SPLAT] = 0.035f;
+        }
+        if (bony && g->snd_cool[SFX_CRUNCH] <= 0) { sfx(g, frand01(g) < 0.5f ? SFX_CRUNCH : SFX_BONES, e->x, e->y, 0.6f, 0.3f); g->snd_cool[SFX_CRUNCH] = 0.05f; }
+        if (g->snd_cool[SFX_SCREAM] <= 0) { sfx(g, death_voice(e->type), e->x, e->y, 0.55f, 0.25f); g->snd_cool[SFX_SCREAM] = 0.09f; }
     }
     if (e->flags & EF_EXPLODE) explode(g, e->x, e->y, 46.0f, 22.0f * hp_mul(g), 0, 0, 1);
     if (e->elite) { add_shake(g, 0.3f); sfx(g, SFX_BOOM, e->x, e->y, 0.7f, 0.1f); }
@@ -477,7 +621,7 @@ static void spawn_ring_point(Game *g, float *x, float *y, float extra)
     /* lean towards where the player is heading so they run into trouble */
     float mv = sqrtf(g->p.vx * g->p.vx + g->p.vy * g->p.vy);
     if (mv > 20 && frand01(g) < 0.45f) a = atan2f(g->p.vy, g->p.vx) + frands(g) * 1.1f;
-    float rx = VW * 0.5f + 50.0f + extra, ry = VH * 0.5f + 50.0f + extra;
+    float rx = VW * 0.36f + 45.0f + extra, ry = VH * 0.36f + 45.0f + extra;      /* just off the (zoomed) screen */
     float c = cosf(a), s = sinf(a);
     /* a point just outside the screen rectangle */
     float k = fminf(rx / (fabsf(c) + 1e-3f), ry / (fabsf(s) + 1e-3f));
@@ -543,7 +687,7 @@ static void spawn_update(Game *g, float dt)
             if (da < 0.38f) continue;
             spawn_enemy(g, type, g->p.x + cosf(a) * 520.0f, g->p.y + sinf(a) * 380.0f, 0);
         }
-        if (n > 0) announce(g, "HORDE!", 0xFF6040FFu, -1), sfx_ui(g, SFX_SCREECH);
+        if (n > 0) { announce(g, "HORDE!", 0xFF6040FFu, SFX_V_HORDE); sfx_ui(g, SFX_SCREECH); sfx_ui(g, SFX_TAIKO); }
     }
     /* powder kegs to shoot */
     g->barrel_t -= dt;
@@ -778,6 +922,11 @@ static void enemies_update(Game *g, float dt)
         const EnemyDef *d = &EDEF[e->type];
         e->t += dt;
         if (e->flash > 0) e->flash -= dt;
+        if (e->hurt > 0) e->hurt -= dt;
+        if (e->wounds >= 2) {                 /* bleeding as it goes: a trail of drops */
+            e->drip -= dt * (float)e->wounds;
+            if (e->drip <= 0) { e->drip = 0.5f + frand01(g) * 0.5f; add_decal(g, e->x + frands(g) * 4, e->y + e->r * 0.6f, 1.2f + frand01(g) * 1.6f, (EDEF[e->type].blood & 0xFFFFFF00u) | 0xC0u, DC_SPOT); }
+        }
 
         /* the wave is over: everything left goes up in a cascade */
         if (wave_end && d->ai != AI_BOSS) {
@@ -803,7 +952,14 @@ static void enemies_update(Game *g, float dt)
         e->vx *= fr; e->vy *= fr;
         if (e->stun > 0) { e->stun -= dt; continue; }
 
-        if (d->ai == AI_BOSS) { boss_update(g, e, dt); continue; }
+        if (d->ai == AI_BOSS) {
+            float ox = e->x, oy = e->y;
+            boss_update(g, e, dt);
+            float v = sqrtf((e->x - ox) * (e->x - ox) + (e->y - oy) * (e->y - oy)) / (dt > 0 ? dt : 1);
+            e->anim += v * dt * 0.12f;
+            e->mvis = approach(e->mvis, clampf(v / 60.0f, 0, 1), dt * 4.0f);
+            continue;
+        }
 
         float dx = p->x - e->x, dy = p->y - e->y, dd = sqrtf(dx * dx + dy * dy) + 1e-3f;
         float ux = dx / dd, uy = dy / dd;
@@ -849,6 +1005,11 @@ static void enemies_update(Game *g, float dt)
         }
         e->mx = mx; e->my = my;
         e->x += mx * spd * dt; e->y += my * spd * dt;
+        {
+            float v = sqrtf(mx * mx + my * my) * spd;
+            e->anim += v * dt * 0.21f * (d->radius / e->r);
+            e->mvis = approach(e->mvis, clampf(v / 55.0f, 0, 1), dt * 5.0f);
+        }
         if (fabsf(dx) > 2) e->face = dx < 0 ? -1.0f : 1.0f;
 
         /* touching the player */
@@ -1100,6 +1261,8 @@ static void weapons_update(Game *g, const Input *in, float dt)
     int firing = (in->held & (BTN_R | BTN_ZR)) || g->sv.autofire || p->stand_t > 0;
     if (g->phase == PH_WAVEEND || g->phase == PH_BOSSDEAD) firing = 0;
     int mw = p->slot[p->sel];
+    p->firing = firing && mw >= 0;
+    p->shoot_t = p->firing ? 0.0f : p->shoot_t + dt;
 
     /* gatling spin */
     int spinning = firing && mw == W_GATLING;
@@ -1184,6 +1347,7 @@ static void player_update(Game *g, const Input *in, float dt)
         p->dx = dx / l; p->dy = dy / l;
         p->dash_t = 0.2f; p->dash_cd = 1.1f;
         sfx(g, SFX_DASH, p->x, p->y, 0.8f, 0.05f);
+        sfx(g, SFX_WHOOSH, p->x, p->y, 0.6f, 0.1f);
     }
     if (p->dash_t > 0) {
         p->dash_t -= dt;
@@ -1411,7 +1575,14 @@ static void pickups_update(Game *g, float dt)
             switch (u->kind) {
             case PU_COIN: case PU_GOLD: case PU_GEM:
                 p->cash += u->val; p->earned += u->val;
-                if (g->snd_cool[SFX_COIN] <= 0) { sfx(g, u->kind == PU_GEM ? SFX_GEM : SFX_COIN, p->x, p->y, 0.4f, 0.0f); g->snd_cool[SFX_COIN] = 0.035f; }
+                if (g->snd_cool[SFX_COIN] <= 0) {
+                    /* a run of coins climbs the scale, like a pinball bonus count */
+                    static const int SC[15] = { 0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33 };
+                    g->coin_streak = g->coin_t > 0 ? g->coin_streak + 1 : 0;
+                    g->coin_t = 0.6f;
+                    snd_pitch(g, u->kind == PU_GEM ? SFX_GEM : SFX_COIN, 128.0f * powf(2.0f, (float)SC[g->coin_streak % 15] / 12.0f) * 0.85f, 0.45f);
+                    g->snd_cool[SFX_COIN] = 0.03f;
+                }
                 break;
             case PU_HEALTH:
                 p->hp = fminf(p->maxhp, p->hp + p->maxhp * 0.3f);
@@ -1421,7 +1592,7 @@ static void pickups_update(Game *g, float dt)
             case PU_MAGNET: p->magnet_t = 3.0f; sfx(g, SFX_POWERUP, p->x, p->y, 0.9f, 0); add_text(g, p->x, p->y - 30, "MAGNET"); break;
             case PU_NUKE: nuke(g); break;
             case PU_FRENZY: p->frenzy = 9.0f; sfx(g, SFX_POWERUP, p->x, p->y, 1.0f, 0); announce(g, "FRENZY!", 0xFF40C0FFu, SFX_V_FRENZY); break;
-            case PU_CHEST: open_chest(g, u->x, u->y); break;
+            case PU_CHEST: open_chest(g, u->x, u->y); sfx_ui(g, SFX_JACKPOT); if (g->vo_t <= 0) { sfx_ui(g, SFX_V_JACKPOT); g->vo_t = 2; } break;
             }
         }
     }
@@ -1446,6 +1617,27 @@ static void effects_update(Game *g, float dt)
             q->vz -= 600.0f * dt; q->z += q->vz * dt;
             if (q->z < 0) { q->z = 0; q->vz = -q->vz * 0.35f; if (fabsf(q->vz) < 30) q->vz = 0; q->vr *= 0.6f; }
             break;
+        case PT_BLOOD:
+            drag = 0.6f;
+            q->vz -= 520.0f * dt; q->z += q->vz * dt;
+            if (q->z <= 0) {      /* lands: a stain */
+                add_decal(g, q->x, q->y, q->size * (1.0f + frand01(g)), (q->c0 & 0xFFFFFF00u) | 0xD0u, DC_SPOT);
+                *q = g->pt[--g->npt]; i--; continue;
+            }
+            break;
+        case PT_GIB: case PT_HEAD:
+            drag = q->z > 0 ? 0.6f : 7.0f;
+            q->vz -= 600.0f * dt; q->z += q->vz * dt;
+            if (q->z < 0) {
+                q->z = 0;
+                if (q->vz < -60) add_decal(g, q->x, q->y, 2.0f + q->size * 0.6f, 0x5A0606C0u, DC_SPOT);
+                q->vz = -q->vz * 0.3f; if (fabsf(q->vz) < 30) q->vz = 0; q->vr *= 0.5f;
+            } else if (frand01(g) < 0.25f) {
+                Particle *d = add_particle(g, PT_BLOOD, q->x, q->y, q->vx * 0.2f, q->vy * 0.2f, 1.0f, 1.0f, q->kind == PT_HEAD ? EDEF[q->c1 < A_COUNT ? q->c1 : 0].blood : q->c1, 0x200000FFu, 0);
+                d->z = q->z; d->vz = 0;
+            }
+            break;
+        case PT_MIST: drag = 3.0f; q->size += dt * 14.0f; break;
         case PT_RING: drag = 0; break;
         default:       drag = 3.5f; break;
         }
@@ -1465,7 +1657,14 @@ static void effects_update(Game *g, float dt)
         }
     }
     for (int i = 0; i < MAX_BEAM; i++) if (g->beam[i].life > 0) g->beam[i].life -= dt;
-    for (int i = 0; i < MAX_DECAL; i++) if (g->dec[i].life > 0) g->dec[i].life -= dt;
+    for (int i = 0; i < MAX_DECAL; i++) if (g->dec[i].life > 0) { g->dec[i].life -= dt; g->dec[i].age += dt; }
+    for (int i = 0; i < MAX_CORPSE; i++) if (g->corpse[i].alive && (g->corpse[i].life -= dt) <= 0) g->corpse[i].alive = 0;
+    for (int i = 0; i < MAX_LENS; i++) if (g->lens[i].r > 0) {
+        Lens *l = &g->lens[i];
+        l->t += dt;
+        l->drip += dt * (10.0f + l->r * 0.4f) * (l->t < 1.5f ? 1.0f : 0.3f);
+        if (l->t > 3.5f) l->r = 0;
+    }
     for (int i = 0; i < MAX_NUM; i++) g->num[i].t += dt;
     for (int i = 0; i < MAX_FIRE; i++) {
         Fire *f = &g->fire[i];
@@ -1610,6 +1809,8 @@ static void clear_field(Game *g)
     memset(g->beam, 0, sizeof g->beam);
     memset(g->bomb, 0, sizeof g->bomb);
     memset(g->dec, 0, sizeof g->dec);
+    memset(g->corpse, 0, sizeof g->corpse);
+    memset(g->lens, 0, sizeof g->lens);
     memset(g->bar, 0, sizeof g->bar);
     g->boss = -1;
     g->laser_on = 0;
@@ -1674,7 +1875,7 @@ void world_begin_wave(Game *g)
     g->spawn_acc = 0;
     g->p.inv = 1.0f;
     if (g->phase == PH_BOSS) spawn_boss(g);
-    else { sfx_ui(g, SFX_HORN); }
+    else { sfx_ui(g, SFX_HORN); sfx_ui(g, SFX_TAIKO); }
 }
 
 void world_collect_all(Game *g)
@@ -1685,6 +1886,42 @@ void world_collect_all(Game *g)
         if (u->alive && u->kind == PU_CHEST) { u->alive = 0; open_chest(g, g->p.x, g->p.y); }
     }
     for (int i = 0; i < g->npu; i++) if (g->pu[i].kind <= PU_GEM) g->pu[i].alive = 0;
+}
+
+/* the constant racket underneath everything: the horde grumbling, the biome's own noises, a heart pounding
+ * when you're nearly dead */
+static void noise_machine(Game *g, float dt)
+{
+    if (g->phase == PH_WAVEEND || g->phase == PH_BOSSDEAD) return;
+    g->chatter_t -= dt;
+    if (g->chatter_t <= 0) {
+        g->chatter_t = 0.35f + frand01(g) * 0.7f;
+        for (int tries = 0; tries < 6; tries++) {
+            int i = irand(g, g->nen > 0 ? g->nen : 1);
+            Enemy *e = &g->en[i];
+            if (!e->alive || fabsf(e->x - g->camx) > 420 || fabsf(e->y - g->camy) > 260) continue;
+            sfx(g, chatter_voice(e->type), e->x, e->y, 0.3f + 0.2f * frand01(g), 0.25f);
+            break;
+        }
+    }
+    g->amb_t -= dt;
+    if (g->amb_t <= 0) {
+        g->amb_t = 2.0f + frand01(g) * 4.0f;
+        static const int AMB[NBIOMES][4] = {
+            { SFX_WIND, SFX_HOWL, SFX_CAW, SFX_WIND },
+            { SFX_CROAK, SFX_BUBBLES, SFX_CAW, SFX_CROAK },
+            { SFX_BELL, SFX_CHAINS, SFX_CAW, SFX_WAIL },
+            { SFX_CRACKLE, SFX_SCREAM, SFX_CRACKLE, SFX_WIND },
+            { SFX_WHISPER, SFX_LAUGH, SFX_SCREAM, SFX_WHISPER },
+        };
+        int id = AMB[g->biome][irand(g, 4)];
+        float a = frand01(g) * TAU_F;
+        sfx(g, id, g->camx + cosf(a) * 380.0f, g->camy + sinf(a) * 200.0f, id == SFX_SCREAM ? 0.25f : 0.55f, 0.15f);
+    }
+    if (g->p.hp > 0 && g->p.hp < g->p.maxhp * 0.3f) {
+        g->heart_t -= dt;
+        if (g->heart_t <= 0) { g->heart_t = 0.55f + g->p.hp / g->p.maxhp; sfx_ui(g, SFX_HEART); }
+    }
 }
 
 void world_update(Game *g, const Input *in, float dt)
@@ -1721,7 +1958,12 @@ void world_update(Game *g, const Input *in, float dt)
     } else if (g->phase == PH_BOSS) {
         g->run_t += dt;
     }
-    if (g->combo_t > 0) { g->combo_t -= dt; if (g->combo_t <= 0) g->combo = 0; }
+    if (g->combo_t > 0) { g->combo_t -= dt; if (g->combo_t <= 0) { if (g->combo >= 30) sfx_ui(g, SFX_COMBOBREAK); g->combo = 0; } }
+    if (g->mk_t > 0) { g->mk_t -= dt; if (g->mk_t <= 0) { g->mk_count = 0; g->mk_level = 0; } }
+    if (g->coin_t > 0) g->coin_t -= dt;
+    if (g->vo_t > 0) g->vo_t -= dt;
+    if (g->bosshurt_t > 0) g->bosshurt_t -= dt;
+    noise_machine(g, dt);
     g->chaos = fmaxf(0.0f, g->chaos - dt * 0.12f);
     {   /* the screen is full of monsters: that's chaos too */
         float crowd = clampf((float)alive_count(g) / 180.0f, 0, 1) * 0.6f;

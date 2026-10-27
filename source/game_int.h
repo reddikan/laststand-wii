@@ -65,6 +65,7 @@ typedef struct {
     float   mass;
     uint32_t c0, c1;        /* body colours (gibs and splats) */
     uint32_t eye;           /* glowing eye colour */
+    uint32_t blood;         /* what sprays out of it */
 } EnemyDef;
 
 extern const EnemyDef EDEF[A_COUNT];
@@ -84,7 +85,11 @@ typedef struct {
     float mx, my;           /* last movement direction */
     float st;               /* state timer (hops, swoops, boss attacks) */
     float dmgmul;
+    float anim, mvis;       /* stride phase, how fast it is visibly moving (0..1) */
+    float hurt;             /* recent-hit timer for the pained face */
+    float drip;             /* bleeding: time to the next drop */
     int16_t next;           /* spatial grid chain */
+    uint8_t wounds;
     uint8_t type, alive, elite, state, flags, sub;
 } Enemy;
 
@@ -108,7 +113,8 @@ typedef struct {
     uint8_t kind, alive;
 } EBullet;
 
-enum { PT_SPARK, PT_SMOKE, PT_FIRE, PT_CHUNK, PT_GOO, PT_CASING, PT_EMBER, PT_RING, PT_STAR, PT_BONE, PT_DUST, PT_SOUL };
+enum { PT_SPARK, PT_SMOKE, PT_FIRE, PT_CHUNK, PT_GOO, PT_CASING, PT_EMBER, PT_RING, PT_STAR, PT_BONE, PT_DUST, PT_SOUL,
+       PT_BLOOD, PT_MIST, PT_HEAD, PT_GIB };
 
 typedef struct {
     float x, y, vx, vy, life, max, size, rot, vr, z, vz;
@@ -156,11 +162,29 @@ typedef struct {
     uint8_t cluster, alive, big, enemy;   /* enemy: falls from the sky onto a marked spot (boss rain) */
 } Bomb;
 
+enum { DC_SCORCH, DC_POOL, DC_CRATER, DC_SPOT, DC_SMEAR };
 typedef struct {
-    float x, y, r, rot, life;
+    float x, y, r, rot, life, age;
     uint32_t c;
-    uint8_t kind;           /* 0 scorch, 1 splat, 2 crater */
+    uint8_t kind;
 } Decal;
+
+/* bodies left on the ground */
+typedef struct {
+    float x, y, s, rot, face, life;
+    uint32_t seed;
+    uint8_t type, alive, headless;
+} Corpse;
+
+/* blood on the lens when the player is hit */
+typedef struct { float x, y, r, t, drip; uint32_t seed; } Lens;
+
+/* everything a sprite's animation needs */
+typedef struct {
+    float t, run, mv, hurt, atk, lookx, looky, blink, rage;
+    int   wounds, dead, firing, headless;
+    uint32_t seed;
+} Anim;
 
 typedef struct {
     float x, y, hp;
@@ -200,6 +224,8 @@ typedef struct {
     int   target;           /* enemy index or -1 */
     float target_t;
     int   character;
+    int   firing;
+    float shoot_t;          /* time since the trigger was last pulled */
 } Player;
 
 /* ------------------------------------------------------------------ */
@@ -220,14 +246,16 @@ typedef struct {
 #define MAX_EN      320
 #define MAX_BUL     520
 #define MAX_EB      360
-#define MAX_PT      2200
+#define MAX_PT      3000
 #define MAX_BOOM    48
 #define MAX_PU      420
 #define MAX_NUM     32
 #define MAX_FIRE    40
 #define MAX_BEAM    48
 #define MAX_BOMB    40
-#define MAX_DECAL   140
+#define MAX_DECAL   340
+#define MAX_CORPSE  60
+#define MAX_LENS    16
 #define MAX_BARREL  10
 #define MAX_LIGHT   140
 #define MAX_SND     48
@@ -276,6 +304,10 @@ struct Game {
     float  camx, camy;
     float  shake, shx, shy, zoom_punch, flash, flash_r, flash_g, flash_b, red;
     float  stick_aim;
+    int    gibbing;
+    /* the noise machine */
+    int    mk_count, coin_streak, mk_level;
+    float  mk_t, coin_t, amb_t, chatter_t, heart_t, vo_t, bosshurt_t;         /* the next kills are explosive: no bodies, just pieces */
     int    shop_after;      /* 0: the next wave, 1: the next biome */
     float  over_t;
     /* boss attack state */
@@ -294,6 +326,8 @@ struct Game {
     Beam    beam[MAX_BEAM];
     Bomb    bomb[MAX_BOMB];
     Decal   dec[MAX_DECAL];  int ndec_next;
+    Corpse  corpse[MAX_CORPSE]; int ncorpse_next;
+    Lens    lens[MAX_LENS];  int nlens_next;
     Barrel  bar[MAX_BARREL];
     float   barrel_t;
 
@@ -328,6 +362,7 @@ static inline float art_scale(const Enemy *e) { return e->r / EDEF[e->type].radi
 /* game.c */
 void sfx(Game *g, int id, float x, float y, float vol, float pitch_jitter);
 void sfx_ui(Game *g, int id);
+void snd_pitch(Game *g, int id, float pitch, float vol);
 void game_save_now(Game *g);
 int  weapon_cost(const Game *g, int w);
 int  upgrade_cost(const Game *g, int u);
@@ -365,8 +400,13 @@ int  find_nearest(Game *g, float x, float y, float maxd);
 /* draw.c / art.c / hud.c */
 void draw_world(const Game *g);
 void draw_lights_build(Game *g);
+void draw_lens(const Game *g);
 void art_enemy(const Game *g, const Enemy *e, float sx, float sy);
+void art_corpse(const Corpse *c, float x, float y, float fade);
+void art_head(int type, float x, float y, float s, float rot, float face);
+void art_set_detail(int detail);
 void art_player(float x, float y, int character, float face, float walk, float ax, float ay, float t, float hurt, float scale);
+void art_player_ex(float x, float y, int character, float face, const Anim *a, float scale, float rot);
 void art_weapon_icon(int w, float x, float y, float s, float ang, uint32_t tint);
 void art_weapon_held(int w, float x, float y, float ang, float s, float spin, float t);
 void art_upgrade_icon(int u, float x, float y, float s, float t);

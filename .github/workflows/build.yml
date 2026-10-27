@@ -1,4 +1,4 @@
-name: Build laststand_v1.dol
+name: Build laststand_v2.dol
 on: [push, workflow_dispatch]
 permissions:
   contents: write
@@ -9,12 +9,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make
-      - run: cp boot.dol laststand_v1.dol
+      - run: cp boot.dol laststand_v2.dol
       - uses: actions/upload-artifact@v4
         with:
           name: laststand-wii
           path: |
-            laststand_v1.dol
+            laststand_v2.dol
             apps/
   release:
     needs: build
@@ -28,6 +28,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view v1 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create v1 -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LAST STAND v1" --notes "Open laststand_v1.dol in Dolphin (Classic Controller), or copy apps/laststand to an SD card."
-          gh release upload v1 laststand_v1.dol -R "$GITHUB_REPOSITORY" --clobber
+          gh release view v2 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create v2 -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LAST STAND v2" --notes "Open laststand_v2.dol in Dolphin (Classic Controller), or copy apps/laststand to an SD card."
+          gh release upload v2 laststand_v2.dol -R "$GITHUB_REPOSITORY" --clobber

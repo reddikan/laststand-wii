@@ -120,10 +120,159 @@ static void video_init(void)
     GX_LoadPosMtxImm(view, GX_PNMTX0);
 }
 
+/* ------------------------------------------------------------------ */
+/* post-processing (see gfx.h): the frame is copied into textures and   */
+/* drawn back split, blurred, graded, grained and grimed                */
+/* ------------------------------------------------------------------ */
+static void *tex_c, *tex_b, *tex_y, *tex_n, *tex_d;
+static GXTexObj to_c, to_b, to_y, to_n, to_d;
+
+/* a linear 8-bit image into the GPU's tiled I8 layout (8 x 4 texel blocks) */
+static void *make_i8(const uint8_t *src, int w, int h)
+{
+    uint8_t *dst = memalign(32, (size_t)(w * h));
+    int k = 0;
+    for (int by = 0; by < h; by += 4)
+        for (int bx = 0; bx < w; bx += 8)
+            for (int y = 0; y < 4; y++)
+                for (int x = 0; x < 8; x++) dst[k++] = src[(by + y) * w + bx + x];
+    DCFlushRange(dst, (u32)(w * h));
+    return dst;
+}
+
+static void post_init(void)
+{
+    gfx_post_init();
+    tex_c = memalign(32, GX_GetTexBufferSize(640, 480, GX_TF_RGB565, GX_FALSE, 0));
+    tex_b = memalign(32, GX_GetTexBufferSize(320, 240, GX_TF_RGB565, GX_FALSE, 0));
+    tex_y = memalign(32, GX_GetTexBufferSize(320, 240, GX_TF_I8, GX_FALSE, 0));
+    tex_n = make_i8(gfx_noise_tex, POST_TEX, POST_TEX);
+    tex_d = make_i8(gfx_dirt_tex, POST_TEX, POST_TEX);
+    GX_InitTexObj(&to_n, tex_n, POST_TEX, POST_TEX, GX_TF_I8, GX_REPEAT, GX_REPEAT, GX_FALSE);
+    GX_InitTexObjLOD(&to_n, GX_NEAR, GX_NEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    GX_InitTexObj(&to_d, tex_d, POST_TEX, POST_TEX, GX_TF_I8, GX_REPEAT, GX_REPEAT, GX_FALSE);
+    GX_InitTexObjLOD(&to_d, GX_LINEAR, GX_LINEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    Mtx m;
+    guMtxIdentity(m);
+    GX_LoadTexMtxImm(m, GX_TEXMTX0, GX_MTX2x4);
+    GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_POS, GX_POS_XY, GX_F32, 0);
+    GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+    GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+}
+
+static void tq(float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, u32 c)
+{
+    GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
+    GX_Position2f32(x0, y0); GX_Color1u32(c); GX_TexCoord2f32(u0, v0);
+    GX_Position2f32(x1, y0); GX_Color1u32(c); GX_TexCoord2f32(u1, v0);
+    GX_Position2f32(x1, y1); GX_Color1u32(c); GX_TexCoord2f32(u1, v1);
+    GX_Position2f32(x0, y1); GX_Color1u32(c); GX_TexCoord2f32(u0, v1);
+    GX_End();
+}
+
+static float edge_k(float x, float y)
+{
+    float dx = (x / VW - 0.5f) * 2.0f, dy = (y / VH - 0.5f) * 2.0f;
+    float d = sqrtf(dx * dx * 0.8f + dy * dy * 1.1f);
+    float k = (d - 0.35f) / 0.75f;
+    return k < 0 ? 0 : (k > 1 ? 1 : k * k);
+}
+
+static void post_apply(void)
+{
+    const GfxPost *P = &gfx_post_p;
+    u32 w = rmode->fbWidth, h = rmode->efbHeight, top = 0;
+    if (!wide) { u32 bh = (h * 3 / 4) & ~3u; top = ((h - bh) / 2) & ~1u; h = bh; }
+    /* copies: the frame, a half-size (box filtered) copy, and its luminance */
+    GX_SetTexCopySrc(0, top, w, h);
+    GX_SetTexCopyDst(w, h, GX_TF_RGB565, GX_FALSE);
+    GX_CopyTex(tex_c, GX_FALSE);
+    GX_SetTexCopyDst(w / 2, h / 2, GX_TF_RGB565, GX_TRUE);
+    GX_CopyTex(tex_b, GX_FALSE);
+    GX_SetTexCopyDst(w / 2, h / 2, GX_TF_I8, GX_TRUE);
+    GX_CopyTex(tex_y, GX_FALSE);
+    GX_PixModeSync();
+    GX_InvalidateTexAll();
+    GX_InitTexObj(&to_c, tex_c, (u16)w, (u16)h, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GX_InitTexObjLOD(&to_c, GX_LINEAR, GX_LINEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    GX_InitTexObj(&to_b, tex_b, (u16)(w / 2), (u16)(h / 2), GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GX_InitTexObjLOD(&to_b, GX_LINEAR, GX_LINEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    GX_InitTexObj(&to_y, tex_y, (u16)(w / 2), (u16)(h / 2), GX_TF_I8, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GX_InitTexObjLOD(&to_y, GX_LINEAR, GX_LINEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+
+    /* textured drawing: colour = texture * vertex colour, alpha = vertex alpha */
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    GX_SetNumTexGens(1);
+    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
+    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+    GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_TEXC, GX_CC_RASC, GX_CC_ZERO);
+    GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_RASA);
+    GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    GX_InvVtxCache();
+
+    /* 1. black, then the three channels added back, red and blue pulled apart */
+    GX_LoadTexObj(&to_c, GX_TEXMAP0);
+    GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+    tq(0, 0, VW, VH, 0, 0, 1, 1, 0x000000FFu);
+    GX_SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ONE, GX_LO_CLEAR);
+    float su = P->split / VW;
+    tq(0, 0, VW, VH, -su, 0, 1 - su, 1, 0xFF0000FFu);
+    tq(0, 0, VW, VH, 0, 0, 1, 1, 0x00FF00FFu);
+    tq(0, 0, VW, VH, su, 0, 1 + su, 1, 0x0000FFFFu);
+
+    /* 2. blur: the half-size copy over the frame, more towards the edges (a mesh with per-vertex alpha) */
+    GX_LoadTexObj(&to_b, GX_TEXMAP0);
+    GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+    const int MX = 16, MY = 9;
+    for (int pass = 0; pass < 2; pass++) {
+        float off = pass ? -1.5f : 1.5f, ou = off / VW, ov = off / VH, ka = pass ? 0.5f : 0.75f;
+        for (int j = 0; j < MY; j++) {
+            GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT1, (u16)((MX + 1) * 2));
+            for (int i = 0; i <= MX; i++) {
+                for (int r = 0; r < 2; r++) {
+                    float x = VW * (float)i / (float)MX, y = VH * (float)(j + r) / (float)MY;
+                    float a = (P->blur + P->blur_edge * edge_k(x, y)) * ka;
+                    if (a > 1) a = 1;
+                    GX_Position2f32(x, y); GX_Color4u8(255, 255, 255, (u8)(a * 255.0f)); GX_TexCoord2f32(x / VW + ou, y / VH + ov);
+                }
+            }
+            GX_End();
+        }
+    }
+
+    /* 3. grade: tinted luminance over the top */
+    GX_LoadTexObj(&to_y, GX_TEXMAP0);
+    u32 tint = (P->tint & 0xFFFFFF00u) | (u32)(P->desat * 255.0f);
+    tq(0, 0, VW, VH, 0, 0, 1, 1, tint);
+
+    /* 4 + 5. grain and grime: dst * (src + srcalpha), src = tex * k, alpha = 1 - k/2 */
+    GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTCLR, GX_BL_SRCALPHA, GX_LO_CLEAR);
+    GX_LoadTexObj(&to_n, GX_TEXMAP0);
+    u8 k = (u8)(P->grain * 255.0f);
+    tq(0, 0, VW, VH, P->gu, P->gv, P->gu + VW * POST_NU, P->gv + VH * POST_NV, ((u32)k << 24) | ((u32)k << 16) | ((u32)k << 8) | (u32)(255 - k / 2));
+    GX_LoadTexObj(&to_d, GX_TEXMAP0);
+    k = (u8)(P->dirt * 255.0f);
+    tq(0, 0, VW, VH, 0, 0, 1, 1, ((u32)k << 24) | ((u32)k << 16) | ((u32)k << 8) | (u32)(255 - k / 2));
+
+    /* back to plain coloured triangles */
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GX_SetNumTexGens(0);
+    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORDNULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+    GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+    GX_InvVtxCache();
+}
+
 static void draw_list(void)
 {
     for (int s = 0; s < gfx_nseg; s++) {
         const GSeg *seg = &gfx_seg[s];
+        if (seg->mode == BL_POST) { post_apply(); continue; }
         if (seg->count < 3) continue;
         switch (seg->mode) {
         case BL_ADD: GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_CLEAR); break;
@@ -230,7 +379,11 @@ static u32 read_input(Input *in)
 /* ------------------------------------------------------------------ */
 /* audio                                                               */
 /* ------------------------------------------------------------------ */
-#define FIRST_SFX_VOICE MUS_TRACKS
+/* voice 0 carries the menu or the shop music (never both at once); voices 1-3 the three fight layers in sync */
+#define FIRST_SFX_VOICE 4
+static const int MUSV[4] = { MUS_MENU, MUS_RUN, MUS_CHAOS, MUS_BOSS };
+static int v0_track = MUS_MENU;
+static s32 mus_rate = MUS_RATE;
 
 static u64 voice_start[16];
 static int voice_vol[16];
@@ -267,12 +420,28 @@ static void play_sfx(int id, int pitch, float pan, float vol)
 static void music_start(int pitch)
 {
     ASND_Pause(1);                                   /* start every loop on the same sample */
-    s32 rate = MUS_RATE * pitch / 128;
-    for (int t = 0; t < MUS_TRACKS; t++) {
-        ASND_StopVoice(t);
-        ASND_SetInfiniteVoice(t, VOICE_MONO_16BIT, rate, 0, (void *)music_data(t), music_len(t) * 2, 0, 0);
+    mus_rate = MUS_RATE * pitch / 128;
+    for (int v = 0; v < 4; v++) {
+        int t = v == 0 ? v0_track : MUSV[v];
+        ASND_StopVoice(v);
+        ASND_SetInfiniteVoice(v, VOICE_MONO_16BIT, mus_rate, 0, (void *)music_data(t), music_len(t) * 2, 0, 0);
     }
     ASND_Pause(0);
+}
+
+static void music_volumes(const float *mv)
+{
+    int other = v0_track == MUS_MENU ? MUS_SHOP : MUS_MENU;
+    if (mv[v0_track] < 0.02f && mv[other] > mv[v0_track]) {     /* hand voice 0 over */
+        v0_track = other;
+        ASND_StopVoice(0);
+        ASND_SetInfiniteVoice(0, VOICE_MONO_16BIT, mus_rate, 0, (void *)music_data(v0_track), music_len(v0_track) * 2, 0, 0);
+    }
+    for (int v = 0; v < 4; v++) {
+        int t = v == 0 ? v0_track : MUSV[v];
+        int vol = (int)(mv[t] * (float)music_volume(t) * 0.85f);
+        ASND_ChangeVolumeVoice(v, vol, vol);
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -336,6 +505,7 @@ int main(int argc, char **argv)
     SYS_SetResetCallback(on_reset);
     SYS_SetPowerCallback(on_power);
 
+    post_init();
     show_loading();
     game = (Game *)memalign(32, GAME_SIZE);
     game_init(game);                                 /* also synthesizes the sound and the music */
@@ -377,10 +547,7 @@ int main(int argc, char **argv)
         int mpitch = 128, mep = 0;
         game_music(game, mv, &mpitch, &mep);
         if (mep != mus_epoch) { mus_epoch = mep; music_start(mpitch); }
-        for (int t = 0; t < MUS_TRACKS; t++) {
-            int v = (int)(mv[t] * (float)music_volume(t) * 0.85f);
-            ASND_ChangeVolumeVoice(t, v, v);
-        }
+        music_volumes(mv);
 
         save_write();
 

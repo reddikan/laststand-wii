@@ -16,7 +16,7 @@
 #endif
 
 #define MAXLEN 96000                       /* longest single effect: 3 s at 32 kHz */
-#define POOLN  (2600000)                   /* all effects together (~5 MB) */
+#define POOLN  (3800000)                   /* all effects together (~7.6 MB) */
 
 static int16_t POOL[POOLN] __attribute__((aligned(32)));
 static int     pool_used;
@@ -29,14 +29,27 @@ static int     ready;
 
 /* playback volume per effect (every effect is normalised first, then scaled by this) */
 static const uint8_t VOL[SFX_COUNT] = {
-    /* REVOLVER */ 150, /* SCATTER */ 205, /* GATLING */ 120, /* SPINUP */ 120, /* THROW */ 110, /* BOOM */ 215, /* BOOM_BIG */ 255,
-    /* TESLA */ 140, /* RAIL */ 220, /* CASING */ 60,
-    /* HIT */ 85, /* SPLAT */ 120, /* BONES */ 120, /* SHIELD */ 110, /* IMP */ 140, /* BURN */ 100,
-    /* HURT */ 200, /* DASH */ 130, /* COIN */ 95, /* GEM */ 110, /* HEAL */ 170, /* POWERUP */ 190, /* CHEST */ 200, /* NUKE */ 255, /* LASTSTAND */ 255, /* SWAP */ 120,
-    /* EORB */ 90, /* EBONE */ 90, /* HOP */ 70, /* ROAR */ 240, /* SIREN */ 200, /* SLAM */ 250, /* LASER */ 230, /* CHARGE */ 170, /* SUMMON */ 190, /* SCREECH */ 170,
-    /* THUNDER */ 220, /* BARREL */ 200,
-    /* MOVE */ 55, /* SELECT */ 120, /* BUY */ 170, /* ERROR */ 130, /* PAUSE */ 110, /* HORN */ 210, /* WAVECLEAR */ 210, /* GAMEOVER */ 220, /* VICTORY */ 220, /* TICK */ 100,
-    /* voices */ 245, 240, 245, 240, 245, 245, 240, 240,
+    [SFX_REVOLVER] = 150, [SFX_SCATTER] = 205, [SFX_GATLING] = 120, [SFX_SPINUP] = 120, [SFX_THROW] = 110, [SFX_BOOM] = 215, [SFX_BOOM_BIG] = 255,
+    [SFX_TESLA] = 140, [SFX_RAIL] = 220, [SFX_CASING] = 70,
+    [SFX_HIT] = 95, [SFX_SPLAT] = 150, [SFX_BONES] = 130, [SFX_SHIELD] = 110, [SFX_IMP] = 140, [SFX_BURN] = 100,
+    [SFX_HURT] = 210, [SFX_DASH] = 130, [SFX_COIN] = 100, [SFX_GEM] = 115, [SFX_HEAL] = 170, [SFX_POWERUP] = 190, [SFX_CHEST] = 200,
+    [SFX_NUKE] = 255, [SFX_LASTSTAND] = 255, [SFX_SWAP] = 130,
+    [SFX_EORB] = 90, [SFX_EBONE] = 90, [SFX_HOP] = 80, [SFX_ROAR] = 240, [SFX_SIREN] = 200, [SFX_SLAM] = 250, [SFX_LASER] = 230,
+    [SFX_CHARGE] = 170, [SFX_SUMMON] = 190, [SFX_SCREECH] = 170,
+    [SFX_THUNDER] = 220, [SFX_BARREL] = 200,
+    [SFX_MOVE] = 55, [SFX_SELECT] = 120, [SFX_BUY] = 170, [SFX_ERROR] = 130, [SFX_PAUSE] = 110, [SFX_HORN] = 210, [SFX_WAVECLEAR] = 210,
+    [SFX_GAMEOVER] = 220, [SFX_VICTORY] = 220, [SFX_TICK] = 100,
+    [SFX_SPLAT2] = 150, [SFX_SPLAT3] = 150, [SFX_GORE] = 200, [SFX_CRUNCH] = 140, [SFX_HIT2] = 95, [SFX_HIT3] = 95, [SFX_HEADPOP] = 170, [SFX_SPRAY] = 110,
+    [SFX_GROAN] = 150, [SFX_GROAN2] = 150, [SFX_SNARL] = 140, [SFX_SHRIEK] = 130, [SFX_SCREAM] = 150, [SFX_CAW] = 120, [SFX_CROAK] = 120,
+    [SFX_WAIL] = 130, [SFX_HISS] = 120, [SFX_GURGLE] = 130, [SFX_GROWL] = 160,
+    [SFX_CHIME] = 140, [SFX_JACKPOT] = 210, [SFX_CASHREG] = 170, [SFX_STING] = 200, [SFX_TAIKO] = 220, [SFX_RICOCHET] = 100, [SFX_WHOOSH] = 120,
+    [SFX_COMBOBREAK] = 140, [SFX_LEVELUP] = 190,
+    [SFX_BELL] = 170, [SFX_CHAINS] = 120, [SFX_WHISPER] = 130, [SFX_HEART] = 200, [SFX_LAUGH] = 170, [SFX_CRACKLE] = 110, [SFX_HOWL] = 140,
+    [SFX_BUBBLES] = 110, [SFX_WIND] = 130,
+    [SFX_V_LASTSTAND] = 245, [SFX_V_WAVE] = 240, [SFX_V_BOSS] = 245, [SFX_V_FRENZY] = 240, [SFX_V_KABOOM] = 245, [SFX_V_GAMEOVER] = 245,
+    [SFX_V_CLEARED] = 240, [SFX_V_RAMPAGE] = 240, [SFX_V_DOUBLE] = 235, [SFX_V_MULTI] = 240, [SFX_V_MEGA] = 245, [SFX_V_CARNAGE] = 245,
+    [SFX_V_OVERKILL] = 240, [SFX_V_BLOODBATH] = 245, [SFX_V_HEADSHOT] = 235, [SFX_V_GODLIKE] = 250, [SFX_V_JACKPOT] = 240,
+    [SFX_V_SPLATTER] = 235, [SFX_V_SPREE] = 240, [SFX_V_HORDE] = 240,
 };
 
 enum { W_SIN, W_TRI, W_SOFT, W_FM };           /* oscillator shapes */
@@ -237,6 +250,30 @@ static void announcer(int id, const char *phrase, float pitch, float rate)
     finish_fx(id, 0.55f, 1.0f);
 }
 
+/* a creature: formant speech pushed into a growl, no hall */
+static void creature(int id, const char *phrase, float pitch, float rate, float growl, float drive, float wet)
+{
+    begin();
+    int n = speech_render(phrase, pitch, rate, growl, mixbuf + 200, MAXLEN - 12000, SR);
+    float peak = 1e-6f;
+    for (int i = 0; i < n; i++) if (fabsf(mixbuf[200 + i]) > peak) peak = fabsf(mixbuf[200 + i]);
+    for (int i = 0; i < n; i++) mixbuf[200 + i] = sat(mixbuf[200 + i] / peak * drive) * 0.9f;
+    mixend = 200 + n;
+    finish_fx(id, wet, 0.4f);
+}
+
+/* wet: filtered noise bursts with resonant squelches */
+static void splat(float t0, float size, float pitch)
+{
+    noise(t0, 0.18f + size * 0.1f, 1600 * pitch, 180, 1.6f, 1.0f, 0.001f, 0.04f + size * 0.03f, F_LP);
+    tone(t0, 0.16f, 170 * pitch, 50, 0.7f, 0.001f, 0.04f, W_SIN, 0, 0);
+    for (int i = 0; i < 4 + (int)(size * 4); i++) {
+        float t = t0 + 0.015f + 0.03f * (float)i + 0.02f * frand();
+        noise(t, 0.05f, (700 + 600 * (0.5f + 0.5f * frand())) * pitch, 300, 5.0f, 0.35f, 0.001f, 0.015f, F_BP);
+    }
+    tone(t0 + 0.02f, 0.12f, 420 * pitch, 140 * pitch, 0.25f, 0.003f, 0.04f, W_FM, 1.3f, 3.0f);   /* the squelch */
+}
+
 static void explosion(float size, float dark)
 {
     tone(0, 0.9f + size, 90 - dark * 20, 26, 1.0f, 0.001f, 0.22f + size * 0.25f, W_SIN, 0, 0);
@@ -294,11 +331,7 @@ void audio_init(void)
 
     /* --- hits and deaths --- */
     begin(); noise(0, 0.06f, 900, 300, 1.0f, 1.0f, 0.001f, 0.015f, F_LP); tone(0, 0.06f, 200, 80, 0.5f, 0.001f, 0.02f, W_SIN, 0, 0); finish_fx(SFX_HIT, 0.0f, 0.0f);
-    begin();                                                         /* splat: wet and nasty */
-    noise(0, 0.2f, 1400, 200, 1.4f, 1.0f, 0.001f, 0.05f, F_LP);
-    tone(0, 0.15f, 160, 50, 0.6f, 0.001f, 0.04f, W_SIN, 0, 0);
-    for (int i = 0; i < 4; i++) noise(0.04f + 0.03f * (float)i, 0.04f, 900 + 300 * frand(), 400, 3.0f, 0.25f, 0.001f, 0.012f, F_BP);
-    finish_fx(SFX_SPLAT, 0.1f, 0.2f);
+    begin(); splat(0, 0.5f, 1.0f); finish_fx(SFX_SPLAT, 0.1f, 0.2f);
     begin();                                                         /* bones clattering */
     for (int i = 0; i < 7; i++) { float t = 0.025f * (float)i + 0.01f * frand(); noise(t, 0.03f, 2600 + 900 * frand(), 1800, 5.0f, 0.5f, 0.0005f, 0.008f, F_BP); tone(t, 0.04f, 900 + 500 * frand(), 700, 0.15f, 0.001f, 0.01f, W_TRI, 0, 0); }
     finish_fx(SFX_BONES, 0.15f, 0.2f);
@@ -389,6 +422,77 @@ void audio_init(void)
     announcer(SFX_V_GAMEOVER,  "G EY^ M _ OW^ V ER", A * 0.95f, 1.2f);
     announcer(SFX_V_CLEARED,   "K L IH^ R D", A, 1.1f);
     announcer(SFX_V_RAMPAGE,   "R AE^ M P EY D ZH", A, 1.0f);
+    announcer(SFX_V_DOUBLE,    "D AH^ B AX L _ K IH L", A, 1.05f);
+    announcer(SFX_V_MULTI,     "M AH^ L T IY _ K IH^ L", A, 1.05f);
+    announcer(SFX_V_MEGA,      "M EH^ G AX _ K IH^ L", A, 1.05f);
+    announcer(SFX_V_CARNAGE,   "K AA^ R N IH D ZH", A * 0.95f, 1.1f);
+    announcer(SFX_V_OVERKILL,  "OW^ V ER _ K IH^ L", A, 1.05f);
+    announcer(SFX_V_BLOODBATH, "B L AH^ D _ B AE^ TH", A * 0.95f, 1.1f);
+    announcer(SFX_V_HEADSHOT,  "HH EH^ D _ SH AA T", A, 1.0f);
+    announcer(SFX_V_GODLIKE,   "G AA^ D _ L AY K", A * 0.9f, 1.25f);
+    announcer(SFX_V_JACKPOT,   "D ZH AE^ K _ P AA T", A, 1.05f);
+    announcer(SFX_V_SPLATTER,  "S P L AE^ T ER", A, 1.0f);
+    announcer(SFX_V_SPREE,     "K IH^ L IH NG _ S P R IY^", A, 1.05f);
+    announcer(SFX_V_HORDE,     "HH AO^ R D _ IH N K AH^ M IH NG", A, 1.05f);
+
+    /* --- gore --- */
+    begin(); splat(0, 0.6f, 0.8f); noise(0.03f, 0.1f, 2500, 900, 3.0f, 0.3f, 0.001f, 0.03f, F_BP); finish_fx(SFX_SPLAT2, 0.1f, 0.2f);
+    begin(); splat(0, 0.4f, 1.25f); splat(0.05f, 0.3f, 0.9f); finish_fx(SFX_SPLAT3, 0.1f, 0.2f);
+    begin();                                                         /* gore: blown apart */
+    splat(0, 1.0f, 0.7f); splat(0.04f, 0.8f, 1.1f); splat(0.1f, 0.6f, 0.9f);
+    tone(0, 0.3f, 110, 35, 0.9f, 0.001f, 0.08f, W_SIN, 0, 0);
+    for (int i = 0; i < 6; i++) noise(0.02f + 0.03f * (float)i, 0.03f, 2600 + 900 * frand(), 1500, 6.0f, 0.4f, 0.0005f, 0.008f, F_BP);   /* bone snaps */
+    noise(0.12f, 0.6f, 900, 300, 2.0f, 0.25f, 0.02f, 0.2f, F_BP);   /* the patter of it coming down */
+    finish_fx(SFX_GORE, 0.2f, 0.3f);
+    begin(); for (int i = 0; i < 5; i++) { float t = 0.02f * (float)i + 0.01f * frand(); noise(t, 0.03f, 1800 + 1400 * frand(), 900, 7.0f, 0.6f, 0.0005f, 0.007f, F_BP); }
+             tone(0, 0.08f, 140, 60, 0.6f, 0.001f, 0.025f, W_SIN, 0, 0); finish_fx(SFX_CRUNCH, 0.1f, 0.1f);
+    begin(); noise(0, 0.07f, 1100, 250, 1.4f, 1.0f, 0.001f, 0.02f, F_LP); tone(0, 0.07f, 260, 90, 0.5f, 0.001f, 0.02f, W_SIN, 0, 0);
+             noise(0.01f, 0.03f, 900, 900, 4.0f, 0.3f, 0.001f, 0.008f, F_BP); finish_fx(SFX_HIT2, 0.0f, 0.0f);
+    begin(); noise(0, 0.05f, 1600, 400, 1.2f, 1.0f, 0.001f, 0.012f, F_LP); tone(0, 0.05f, 320, 120, 0.4f, 0.001f, 0.015f, W_FM, 1.4f, 2.0f); finish_fx(SFX_HIT3, 0.0f, 0.0f);
+    begin(); tone(0, 0.1f, 900, 160, 0.8f, 0.001f, 0.03f, W_SIN, 0, 0); splat(0.03f, 0.5f, 1.1f); finish_fx(SFX_HEADPOP, 0.15f, 0.2f);
+    begin(); noise(0, 0.35f, 2500, 1200, 1.0f, 0.7f, 0.01f, 0.1f, F_BP); for (int i = 0; i < 8; i++) noise(0.05f + 0.03f * (float)i, 0.02f, 1500, 1500, 6, 0.2f, 0.001f, 0.005f, F_BP); finish_fx(SFX_SPRAY, 0.05f, 0.1f);
+
+    /* --- the horde's voices --- */
+    creature(SFX_GROAN,   "UH^ UH OW^ RR", 0.55f, 1.6f, 0.9f, 2.0f, 0.3f);
+    creature(SFX_GROAN2,  "AA^ AA UH^ UH", 0.48f, 1.9f, 1.0f, 2.0f, 0.3f);
+    creature(SFX_SNARL,   "RR AA^ RR", 0.9f, 0.7f, 1.0f, 3.0f, 0.1f);
+    creature(SFX_SHRIEK,  "IY^ IY", 3.4f, 0.6f, 0.6f, 2.5f, 0.2f);
+    creature(SFX_SCREAM,  "AA^ AA AA", 2.2f, 1.1f, 0.8f, 3.0f, 0.35f);
+    creature(SFX_HISS,    "HH S SH S", 1.0f, 1.0f, 0.0f, 1.5f, 0.1f);
+    creature(SFX_GURGLE,  "G UH^ RR UH G UH", 0.7f, 0.9f, 1.0f, 2.5f, 0.2f);
+    creature(SFX_GROWL,   "RR RR", 0.42f, 1.4f, 1.0f, 3.0f, 0.3f);
+    begin(); for (int i = 0; i < 2; i++) { tone(0.18f * (float)i, 0.16f, 1100, 800, 0.6f, 0.005f, 0.06f, W_FM, 1.5f, 4.0f); noise(0.18f * (float)i, 0.14f, 1500, 1000, 3.0f, 0.4f, 0.005f, 0.05f, F_BP); } finish_fx(SFX_CAW, 0.25f, 0.5f);
+    begin(); for (int i = 0; i < 3; i++) tone(0.09f * (float)i, 0.12f, 120, 95, 0.8f, 0.004f, 0.05f, W_FM, 0.5f, 5.0f); finish_fx(SFX_CROAK, 0.15f, 0.3f);
+    begin(); tone(0, 1.3f, 500, 900, 0.4f, 0.2f, 0.5f, W_FM, 1.01f, 0.5f); tone(0.2f, 1.1f, 760, 480, 0.3f, 0.2f, 0.5f, W_SIN, 0, 0); noise(0, 1.3f, 1200, 2600, 4.0f, 0.2f, 0.3f, 0.5f, F_BP); finish_fx(SFX_WAIL, 0.6f, 0.9f);
+
+    /* --- the pinball layer --- */
+    begin(); bell(0, 2093, 0.5f, 0.12f); bell(0, 4186, 0.15f, 0.06f); finish_fx(SFX_CHIME, 0.2f, 0.3f);
+    begin(); { static const float N[8] = { 523, 659, 784, 1047, 1319, 1568, 2093, 2637 }; for (int i = 0; i < 8; i++) bell(0.06f * (float)i, N[i], 0.35f, 0.15f); }
+             for (int i = 0; i < 14; i++) bell(0.5f + 0.03f * (float)i + 0.02f * frand(), 2500 + 1800 * frand(), 0.15f, 0.04f);
+             tone(0.48f, 1.0f, 130.8f, 130.8f, 0.4f, 0.01f, 0.4f, W_SOFT, 0.5f, 0); finish_fx(SFX_JACKPOT, 0.4f, 0.5f);
+    begin(); noise(0, 0.08f, 3000, 1500, 3.0f, 0.5f, 0.001f, 0.02f, F_BP); noise(0.1f, 0.1f, 1200, 600, 2.0f, 0.5f, 0.002f, 0.03f, F_BP);
+             bell(0.16f, 2637, 0.6f, 0.2f); bell(0.16f, 3520, 0.3f, 0.15f); finish_fx(SFX_CASHREG, 0.2f, 0.3f);
+    begin();                                                         /* sting: a fat distorted E power chord and a crash */
+    for (int i = 0; i < 3; i++) { static const float N[3] = { 82.4f, 123.5f, 164.8f }; tone(0, 1.2f, N[i], N[i] * 0.995f, 0.35f, 0.002f, 0.4f, W_SOFT, -0.5f, 0); }
+    noise(0, 1.2f, 9000, 4000, 0.7f, 0.35f, 0.001f, 0.4f, F_HP); tone(0, 0.3f, 90, 40, 0.8f, 0.001f, 0.1f, W_SIN, 0, 0);
+    for (int i = 0; i < mixend; i++) mixbuf[i] = sat(mixbuf[i] * 3.0f);
+    finish_fx(SFX_STING, 0.3f, 0.6f);
+    begin(); tone(0, 0.9f, 70, 42, 1.0f, 0.001f, 0.3f, W_SIN, 0, 0); noise(0, 0.12f, 1500, 300, 1.0f, 0.6f, 0.001f, 0.03f, F_LP); finish_fx(SFX_TAIKO, 0.45f, 0.9f);
+    begin(); tone(0, 0.3f, 3200, 1100, 0.5f, 0.001f, 0.1f, W_FM, 1.5f, 0.6f); noise(0, 0.03f, 5000, 5000, 1.5f, 0.4f, 0.001f, 0.01f, F_BP); finish_fx(SFX_RICOCHET, 0.2f, 0.3f);
+    begin(); noise(0, 0.35f, 300, 3000, 1.2f, 0.8f, 0.12f, 0.08f, F_BP); finish_fx(SFX_WHOOSH, 0.1f, 0.2f);
+    begin(); tone(0, 0.4f, 600, 150, 0.5f, 0.002f, 0.15f, W_SOFT, 0.3f, 0); tone(0.08f, 0.4f, 450, 110, 0.4f, 0.002f, 0.15f, W_SOFT, 0.3f, 0); finish_fx(SFX_COMBOBREAK, 0.2f, 0.3f);
+    begin(); { static const float N[6] = { 392, 494, 587, 784, 988, 1175 }; for (int i = 0; i < 6; i++) tone(0.05f * (float)i, 0.3f, N[i], N[i], 0.3f, 0.002f, 0.12f, W_SOFT, 0.2f, 0); } finish_fx(SFX_LEVELUP, 0.35f, 0.4f);
+
+    /* --- ambience --- */
+    begin(); bell(0, 220, 0.6f, 1.2f); bell(0, 330.5f, 0.25f, 0.9f); tone(0, 3.0f, 110, 110, 0.25f, 0.01f, 1.2f, W_SIN, 0, 0); finish_fx(SFX_BELL, 0.6f, 1.0f);
+    begin(); for (int i = 0; i < 16; i++) { float t = 0.04f * (float)i + 0.03f * frand(); bell(t, 1800 + 1600 * frand(), 0.2f, 0.02f); noise(t, 0.02f, 4000, 4000, 4.0f, 0.15f, 0.001f, 0.005f, F_BP); } finish_fx(SFX_CHAINS, 0.3f, 0.5f);
+    begin(); for (int i = 0; i < 5; i++) noise(0.25f * (float)i, 0.3f, 1200 + 900 * frand(), 3000 + 1500 * frand(), 6.0f, 0.5f, 0.06f, 0.12f, F_BP); finish_fx(SFX_WHISPER, 0.5f, 0.9f);
+    begin(); tone(0, 0.15f, 60, 40, 1.0f, 0.004f, 0.05f, W_SIN, 0, 0); tone(0.22f, 0.15f, 55, 38, 0.8f, 0.004f, 0.05f, W_SIN, 0, 0); finish_fx(SFX_HEART, 0.0f, 0.0f);
+    creature(SFX_LAUGH, "HH AH^ _ HH AH _ HH AH^ _ HH AH", 0.75f, 0.75f, 0.8f, 2.5f, 0.6f);
+    begin(); for (int i = 0; i < 30; i++) noise(0.6f * frand(), 0.01f, 2000 + 4000 * frand(), 2000, 3.0f, 0.3f + 0.4f * frand(), 0.0005f, 0.003f, F_BP); noise(0, 0.6f, 600, 400, 1.0f, 0.2f, 0.1f, 0.3f, F_LP); finish_fx(SFX_CRACKLE, 0.0f, 0.0f);
+    begin(); tone(0, 1.6f, 380, 620, 0.5f, 0.3f, 0.7f, W_FM, 1.0f, 0.4f); tone(0.6f, 1.2f, 620, 300, 0.4f, 0.1f, 0.5f, W_FM, 1.0f, 0.3f); finish_fx(SFX_HOWL, 0.7f, 1.0f);
+    begin(); for (int i = 0; i < 7; i++) tone(0.08f * (float)i + 0.03f * frand(), 0.07f, 300 + 300 * frand(), 900 + 400 * frand(), 0.4f, 0.003f, 0.03f, W_SIN, 0, 0); finish_fx(SFX_BUBBLES, 0.2f, 0.3f);
+    begin(); noise(0, 2.4f, 250, 700, 2.5f, 0.8f, 0.8f, 0.9f, F_BP); noise(0.3f, 2.0f, 500, 1100, 4.0f, 0.3f, 0.6f, 0.7f, F_BP); finish_fx(SFX_WIND, 0.0f, 0.0f);
 }
 
 const int16_t *audio_data(int id) { return POOL + sfx_off[id]; }

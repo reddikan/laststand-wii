@@ -20,7 +20,29 @@
 #define GFX_MAX_VTX 150000
 #define GFX_MAX_SEG 4096
 
-enum { BL_ALPHA, BL_ADD, BL_MUL };   /* BL_MUL: dst = dst * src colour (the lighting pass) */
+enum { BL_ALPHA, BL_ADD, BL_MUL, BL_POST };   /* BL_MUL: dst = 2 * dst * src colour (the lighting pass); BL_POST: see gfx_post */
+
+/*
+ * Post-processing, applied once per frame where gfx_post() puts its marker (everything drawn before it is
+ * processed, everything after is drawn on top, crisp). The platform implements it with copies of the frame
+ * into textures (main.c on the Wii, the software rasterizer in the test harness):
+ *   1. RGB split: red sampled `split` virtual pixels to the left, blue to the right (green in place)
+ *   2. blur: a half-resolution copy blended over the frame, by `blur` everywhere plus `blur_edge` towards
+ *      the screen edges (a depth-of-field-like softness)
+ *   3. grade: a luminance copy tinted by `tint` blended over by `desat` (washes the colour out)
+ *   4. grain: out = dst * (1 + grain * (N - 0.5)) with N the noise texture, offset by (gu, gv) each frame
+ *   5. grime: the same with the static dirt texture, by `dirt`
+ */
+typedef struct { float split, blur, blur_edge, desat, grain, dirt, gu, gv; uint32_t tint; } GfxPost;
+extern GfxPost gfx_post_p;
+void gfx_post(const GfxPost *p);
+#define POST_TEX 128
+extern uint8_t gfx_noise_tex[POST_TEX * POST_TEX];     /* film grain, 0..255, mean 128 */
+extern uint8_t gfx_dirt_tex[POST_TEX * POST_TEX];      /* smudges and scratches, mostly ~128 */
+void gfx_post_init(void);
+/* noise texture repeats: texels per virtual pixel (one texel per Wii framebuffer pixel) */
+#define POST_NU ((640.0f / 854.0f) / (float)POST_TEX)
+#define POST_NV (1.0f / (float)POST_TEX)
 
 typedef struct { float x, y; uint32_t c; } GVtx;          /* c = 0xRRGGBBAA */
 typedef struct { int mode, start, count; } GSeg;
