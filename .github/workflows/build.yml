@@ -8,14 +8,15 @@ jobs:
     container: devkitpro/devkitppc:latest
     steps:
       - uses: actions/checkout@v4
-      - run: make
-      - run: $DEVKITPPC/bin/powerpc-eabi-size boot.elf
+      - run: make 2>&1 | tee build.log; test -f boot.dol
+      - run: $DEVKITPPC/bin/powerpc-eabi-size boot.elf | tee -a build.log
       - run: cp boot.dol laststand_v2.dol
       - uses: actions/upload-artifact@v4
         with:
           name: laststand-wii
           path: |
             laststand_v2.dol
+            build.log
             apps/
   release:
     needs: build
@@ -31,4 +32,4 @@ jobs:
         run: |
           gh release view v2 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create v2 -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LAST STAND v2" --notes "Open laststand_v2.dol in Dolphin (Classic Controller), or copy apps/laststand to an SD card."
-          gh release upload v2 laststand_v2.dol -R "$GITHUB_REPOSITORY" --clobber
+          gh release upload v2 laststand_v2.dol build.log -R "$GITHUB_REPOSITORY" --clobber
